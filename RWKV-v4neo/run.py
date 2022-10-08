@@ -58,8 +58,7 @@ vocab_size = 50277
 # n_layer = 24
 # n_embd = 2048
 # ctx_len = 4096
-
-MODEL_NAME = '600'
+MODEL_NAME = 'RWKV-4-Pile-3B-20221005-7348'
 n_layer = 32
 n_embd = 2560
 ctx_len = 1024
@@ -72,9 +71,10 @@ ctx_len = 1024
 
 args.RUN_DEVICE = "cuda"  # 'cpu' (already very fast) // 'cuda'
 # how many layers to offload to cuda, smaller number is slower, but uses less vram. // n_layer
-args.cudalayers = 9
+
 args.FLOAT_MODE = "fp16"  # fp32 // bf16 (saves VRAM, slightly less accurate)
 
+args.cudalayers = 9
 args.MODEL_NAME = MODEL_NAME
 args.n_layer = n_layer
 args.n_embd = n_embd
@@ -180,14 +180,14 @@ state = None
 out = None
 
 for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
-    print(("-" * 50) + '\n' + context, end="")
-
     print("torch.cuda.memory_allocated: %fGB" %
           (torch.cuda.memory_allocated(0)/1024/1024/1024))
     print("torch.cuda.memory_reserved: %fGB" %
           (torch.cuda.memory_reserved(0)/1024/1024/1024))
     print("torch.cuda.max_memory_reserved: %fGB" %
           (torch.cuda.max_memory_reserved(0)/1024/1024/1024))
+
+    print(("-" * 50) + '\n' + context, end="")
 
     time_ref = time.time_ns()
     ctx = src_ctx.copy()
