@@ -54,9 +54,19 @@ class TOKENIZER():
 
     def sample_logits(self, out, x, ctx_len, temperature=1.0, top_p_usual=None, top_p_newline=None):
         # out[self.UNKNOWN_CHAR] = -float('Inf')
+       # out[self.UNKNOWN_CHAR] = -float('Inf')
         lastChar = int(x[-1])
 
         probs = F.softmax(out, dim=-1)
+
+        if self.charMode:
+            if self.itos[lastChar] == '\n':
+                top_p = top_p_newline
+            else:
+                top_p = top_p_usual
+        else:
+            top_p = top_p_usual
+
         if os.environ["RWKV_RUN_DEVICE"] == "cpu":
             probs = probs.numpy()
             sorted_probs = np.sort(probs)[::-1]
