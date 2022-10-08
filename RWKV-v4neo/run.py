@@ -27,8 +27,6 @@ args = types.SimpleNamespace()
 # Do this first: pip install torchdynamo
 ########################################################################################################
 
-# if args.RUN_DEVICE == "cuda":
-#     os.environ["RWKV_RUN_BACKEND"] = 'nvfuser' # !!!BUGGY!!! wrong output
 
 TOKEN_MODE = "pile"
 WORD_NAME = [
@@ -39,10 +37,10 @@ UNKNOWN_CHAR = None
 vocab_size = 50277
 
 # note; you can set MODEL_NAME to your fine-tuned model
-# MODEL_NAME = "100"
-# n_layer = 12
-# n_embd = 768
-# ctx_len = 1024
+MODEL_NAME = "100"
+n_layer = 12
+n_embd = 768
+ctx_len = 1024
 
 # MODEL_NAME = '/fsx/BlinkDL/rwkv-release/RWKV-4-Pile-430M-20220808-8066'
 # n_layer = 24
@@ -58,10 +56,10 @@ vocab_size = 50277
 # n_layer = 24
 # n_embd = 2048
 # ctx_len = 4096
-MODEL_NAME = 'RWKV-4-Pile-3B-20221005-7348'
-n_layer = 32
-n_embd = 2560
-ctx_len = 1024
+# MODEL_NAME = 'RWKV-4-Pile-3B-20221005-7348'
+# n_layer = 32
+# n_embd = 2560
+# ctx_len = 1024
 
 # MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-20221004-3047'
 # n_layer = 32
@@ -72,9 +70,9 @@ ctx_len = 1024
 args.RUN_DEVICE = "cuda"  # 'cpu' (already very fast) // 'cuda'
 # how many layers to offload to cuda, smaller number is slower, but uses less vram. // n_layer
 
-args.FLOAT_MODE = "fp16"  # fp32 // bf16 (saves VRAM, slightly less accurate)
+args.FLOAT_MODE = "bf16"  # fp32 // bf16 (saves VRAM, slightly less accurate)
 
-args.cudalayers = 9
+args.cudalayers = 12
 args.MODEL_NAME = MODEL_NAME
 args.n_layer = n_layer
 args.n_embd = n_embd
