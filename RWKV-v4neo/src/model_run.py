@@ -11,17 +11,20 @@ from torch.nn import functional as F
 import torch.nn as nn
 from typing import List, Dict
 
-# try:
-#     import torchdynamo
-#     MyFunction = torchdynamo.optimize(os.environ["RWKV_RUN_BACKEND"]) # !!!BUGGY!!! wrong output
-# except:
-
 
 def __nop(ob):
     return ob
 
 
+# try:
+#     import torchdynamo
+#     MyFunction = torchdynamo.optimize(
+#         os.environ["RWKV_RUN_BACKEND"])  # !!!BUGGY!!! wrong output
+# except:
+
+#
 MyFunction = __nop
+
 
 RWKV_HEAD_QK_DIM = 0
 print(f'\nRWKV_HEAD_QK_DIM {RWKV_HEAD_QK_DIM}\n')
@@ -34,13 +37,15 @@ DEBUG_TIME = False   # True False - show trained time-coeffs
 class RWKV_RNN(nn.Module):
     def __init__(self, args):
         super().__init__()
-
+        self.cudaLayer = types.SimpleNamespace()
+        self.cudaKeys = []
         self.args = args
         self.FLOAT_MODE = args.FLOAT_MODE
         self.RUN_DEVICE = args.RUN_DEVICE
 
         with torch.no_grad():
             w = torch.load(args.MODEL_NAME + '.pth', map_location='cpu')
+            cudal = {}
             # refine weights and send to correct device
             keys = list(w.keys())
             if 'pos_emb_x' in keys:
@@ -76,8 +81,16 @@ class RWKV_RNN(nn.Module):
 
                     if ((x.split('.')[1] == "weight" or x.split('.')[1] == "bias") or int(x.split('.')[1]) < args.cudalayers):
                         w[x] = w[x].cuda()
-
+                if (self.RUN_DEVICE == "proc" and 'blocks.0.' in x):
+                    xx = x[len('blocks.0.'):]
+                    print(xx)
+                    cudal[xx] = torch.zeros(1)
+                    cudal[xx].requires_grad = False
+                    cudal[xx] = cudal[xx].to("cuda")
+                if (self.RUN_DEVICE == "proc" and not 'blocks.' in x and x != 'emb.weight'):
+                    w[x] = w[x].to("cuda")
                 if ('blocks.' not in x) or ('blocks.0.' in x):
+
                     if print_need_newline:
                         print('\n', end='')
                         print_need_newline = False
@@ -103,6 +116,26 @@ class RWKV_RNN(nn.Module):
                 else:
                     if i == len(xx) - 1:
                         setattr(here, xx[i], w[x])
+                    elif not hasattr(here, xx[i]):
+                        if xx[i+1].isdigit():
+                            setattr(here, xx[i], {})
+                        else:
+                            setattr(here, xx[i], types.SimpleNamespace())
+                    here = getattr(here, xx[i])
+        keys = list(cudal.keys())
+        self.cudaLayer = types.SimpleNamespace()
+        for x in keys:
+            xx = x.split('.')
+            here = self.cudaLayer
+            for i in range(len(xx)):
+                if xx[i].isdigit():
+                    ii = int(xx[i])
+                    if ii not in here:
+                        here[ii] = types.SimpleNamespace()
+                    here = here[ii]
+                else:
+                    if i == len(xx) - 1:
+                        setattr(here, xx[i], cudal[x])
                     elif not hasattr(here, xx[i]):
                         if xx[i+1].isdigit():
                             setattr(here, xx[i], {})
@@ -239,7 +272,7 @@ class RWKV_RNN(nn.Module):
             args = self.args
 
             x = w.emb.weight[ctx[-1]]
-            if self.RUN_DEVICE == 'cuda':
+            if self.RUN_DEVICE == 'cuda' or self.RUN_DEVICE == 'proc':
                 x = x.cuda()
             try:
                 pos_emb = w.pos_emb[len(ctx)-1]
@@ -249,25 +282,73 @@ class RWKV_RNN(nn.Module):
 
             if state == None:
                 state = torch.zeros(
-                    args.n_layer * 5, args.n_embd, device=self.RUN_DEVICE)
+                    args.n_layer * 5, args.n_embd, device="cpu" if self.RUN_DEVICE == "cpu" else "cuda")
                 for i in range(args.n_layer):
                     state[5*i+4] -= 1e30
 
             for i in range(args.n_layer):
-                if (x.device != w.blocks[i].ln1.weight.device):
+                if (self.RUN_DEVICE == 'proc'):
+
+                    self.cudaLayer.ln1.weight = self.w.blocks[i].ln1.weight.cuda(
+                    )
+                    self.cudaLayer.ln1.bias = self.w.blocks[i].ln1.bias.cuda(
+                    ).cuda()
+                    self.cudaLayer.ln2.weight = self.w.blocks[i].ln2.weight.cuda(
+                    )
+                    self.cudaLayer.ln2.bias = self.w.blocks[i].ln2.bias.cuda()
+
+                    if (i == 0):
+
+                        self.cudaLayer.ln0.weight = self.w.blocks[i].ln0.weight.cuda(
+                        )
+                        self.cudaLayer.ln0.bias = self.w.blocks[i].ln0.bias.cuda(
+                        )
+
+                    self.cudaLayer.att.time_decay = self.w.blocks[i].att.time_decay.cuda(
+                    )
+                    self.cudaLayer.att.time_first = self.w.blocks[i].att.time_first.cuda(
+                    )
+                    self.cudaLayer.att.time_mix_k = self.w.blocks[i].att.time_mix_k.cuda(
+                    )
+                    self.cudaLayer.att.time_mix_v = self.w.blocks[i].att.time_mix_v.cuda(
+                    )
+                    self.cudaLayer.att.time_mix_r = self.w.blocks[i].att.time_mix_r.cuda(
+                    )
+                    self.cudaLayer.att.key.weight = self.w.blocks[i].att.key.weight.cuda(
+                    )
+                    self.cudaLayer.att.value.weight = self.w.blocks[i].att.value.weight.cuda(
+                    )
+                    self.cudaLayer.att.receptance.weight = self.w.blocks[i].att.receptance.weight.cuda(
+                    )
+                    self.cudaLayer.att.output.weight = self.w.blocks[i].att.output.weight.cuda(
+                    )
+                    self.cudaLayer.ffn.time_mix_k = self.w.blocks[i].ffn.time_mix_k.cuda(
+                    )
+                    self.cudaLayer.ffn.time_mix_r = self.w.blocks[i].ffn.time_mix_r.cuda(
+                    )
+                    self.cudaLayer.ffn.key.weight = self.w.blocks[i].ffn.key.weight.cuda(
+                    )
+                    self.cudaLayer.ffn.receptance.weight = self.w.blocks[i].ffn.receptance.weight.cuda(
+                    )
+                    self.cudaLayer.ffn.value.weight = self.w.blocks[i].ffn.value.weight.cuda(
+                    )
+                    layer = self.cudaLayer
+                else:
+                    layer = w.blocks[i]
+                if (x.device != layer.ln1.weight.device):
 
                     x = x.to("cpu")
                     state = state.to("cpu")
                 if i == 0:
-                    x = self.LN(x, w.blocks[i].ln0)
+                    x = self.LN(x, layer.ln0)
 
-                ww = w.blocks[i].att
-                x = x + self.SA(self.LN(x, w.blocks[i].ln1), state, i,
+                ww = layer.att
+                x = x + self.SA(self.LN(x, layer.ln1), state, i,
                                 ww.time_mix_k, ww.time_mix_v, ww.time_mix_r, ww.time_first, ww.time_decay,
                                 ww.key.weight, ww.value.weight, ww.receptance.weight, ww.output.weight)
 
-                ww = w.blocks[i].ffn
-                x = x + self.FF(self.LN(x, w.blocks[i].ln2), state, i,
+                ww = layer.ffn
+                x = x + self.FF(self.LN(x, layer.ln2), state, i,
                                 ww.time_mix_k, ww.time_mix_r,
                                 ww.key.weight, ww.value.weight, ww.receptance.weight)
             if args.RUN_DEVICE == 'cuda':
@@ -277,6 +358,7 @@ class RWKV_RNN(nn.Module):
             if args.RUN_DEVICE == 'cuda':
                 x = x.to("cuda")
             x = self.LN(x, w.ln_out)
-            x = w.head.weight @ x
+            if (self.FLOAT_MODE == "fp16"):
+                x = w.head.weight.float() @ x.float()
 
             return x.float(), state
