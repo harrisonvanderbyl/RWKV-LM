@@ -119,7 +119,7 @@ class RWKV_TimeMix(nn.Module):
         self.time_decay = nn.Parameter(torch.ones(RWKV_CFG.n_embd))
         self.time_first = nn.Parameter(torch.ones(RWKV_CFG.n_embd) * math.log(0.3))
         
-        self.time_shift = nn.ZeroPad2d((0,0,1,-1))
+        self.time_shift = nn.ZeroPad2d((0, 0, pow(2,RWKV_CFG.n_layer - (layer_id+1)), -(pow(2,RWKV_CFG.n_layer - (layer_id+1)))))
         self.time_mix_k = nn.Parameter(torch.ones(1,1,RWKV_CFG.n_embd))
         self.time_mix_v = nn.Parameter(torch.ones(1,1,RWKV_CFG.n_embd))
         self.time_mix_r = nn.Parameter(torch.ones(1,1,RWKV_CFG.n_embd))
@@ -317,15 +317,17 @@ class RWKV_RNN(): # this is running in FP32 at this moment
 
     def SA(self, xx, w, name):
         if name not in self.xx:
-            self.xx[name] = torch.zeros(self.n_embd, device=self.RUN_DEVICE)
+            self.xx[name] = torch.zeros(1,self.n_embd, device=self.RUN_DEVICE)
             self.aa[name] = torch.zeros(self.n_embd, device=self.RUN_DEVICE)
             self.bb[name] = torch.zeros(self.n_embd, device=self.RUN_DEVICE)
             self.pp[name] = torch.zeros(self.n_embd, device=self.RUN_DEVICE) - 1e30
-
-        xk = xx * w.time_mix_k + self.xx[name] * (1 - w.time_mix_k)
-        xv = xx * w.time_mix_v + self.xx[name] * (1 - w.time_mix_v)
-        xr = xx * w.time_mix_r + self.xx[name] * (1 - w.time_mix_r)
-        self.xx[name] = xx
+        layer_id = int(name.split('.')[-1])
+        layers = self.xx.keys().__len__()/2
+        # print(f'layer_id {layer_id} layers {layers}')
+        xk = xx * w.time_mix_k + self.xx[name][int(max(0,self.xx[name].shape[0]-(pow(2,layers-(layer_id+1)))))].squeeze() * (1 - w.time_mix_k)
+        xv = xx * w.time_mix_v + self.xx[name][int(max(0,self.xx[name].shape[0]-(pow(2,layers-(layer_id+1)))))].squeeze() * (1 - w.time_mix_v)
+        xr = xx * w.time_mix_r + self.xx[name][int(max(0,self.xx[name].shape[0]-(pow(2,layers-(layer_id+1)))))].squeeze() * (1 - w.time_mix_r)
+        self.xx[name] = torch.cat([ self.xx[name],xx.unsqueeze(0)], dim=0)
 
         r = torch.sigmoid(w.receptance.weight @ xr)
 

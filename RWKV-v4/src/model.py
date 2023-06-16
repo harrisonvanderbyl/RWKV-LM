@@ -193,7 +193,7 @@ class RWKV_TimeMix(torch.jit.ScriptModule):
             self.time_mix_v = nn.Parameter(torch.pow(x, ratio_1_to_almost0) + 0.3 * ratio_0_to_1)
             self.time_mix_r = nn.Parameter(torch.pow(x, 0.5 * ratio_1_to_almost0))
             
-        self.time_shift = nn.ZeroPad2d((0, 0, 1, -1))
+        self.time_shift = nn.ZeroPad2d((0, 0, pow(2,config.n_layer - (layer_id+1)), -(pow(2,config.n_layer - (layer_id+1)))))
 
         self.key = nn.Linear(config.n_embd, attn_sz, bias=False)
         self.value = nn.Linear(config.n_embd, attn_sz, bias=False)
