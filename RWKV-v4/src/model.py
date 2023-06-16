@@ -37,7 +37,7 @@ class L2Wrap(torch.autograd.Function):
 # CUDA Kernel
 ########################################################################################################
 
-T_MAX = 1024 # increase this if your ctx_len is long [NOTE: TAKES LOTS OF VRAM!]
+T_MAX = pow(2,int(os.environ["NLAYER"])) # increase this if your ctx_len is long [NOTE: TAKES LOTS OF VRAM!]
 # it's possible to go beyond CUDA limitations if you slice the ctx and pass the hidden state in each slice
 
 from torch.utils.cpp_extension import load

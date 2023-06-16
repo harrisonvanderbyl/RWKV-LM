@@ -3,6 +3,8 @@
 ########################################################################################################
 
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["NLAYER"] = "12"
 import logging, types
 from src.utils import Dataset
 import torch
@@ -33,7 +35,7 @@ EXPRESS_PILE_MODEL_TYPE = 'RWKV-4-Pile-169M'
 
 ########################################################################################################
 
-datafile = "./page.txt" # your data
+datafile = "./enwiki8.txt" # your data
 datafile_encoding = 'utf-8' # 'utf-8' / 'utf-16le' / 'numpy' (for fine-tuning pile models) / 'binidx' (the Megatron-LM 'binidx' format)
 
 # datafile = 'my-gpt_seq_document'
@@ -67,10 +69,10 @@ os.environ['RWKV_NUM_GPUS'] = '1' # num of GPUs to use
 # 'fp32' (!!!very slow!!! only for verification)
 os.environ['RWKV_FLOAT_MODE'] = 'fp16'
 
-os.environ['RWKV_DEEPSPEED'] = '1' # Use DeepSpeed? 0 = False, 1 = True
+os.environ['RWKV_DEEPSPEED'] = '0' # Use DeepSpeed? 0 = False, 1 = True
 
 if int(os.environ['RWKV_NUM_GPUS']) == 1: # Usually you don't need DeepSpeed for 1 GPU training.
-    os.environ['RWKV_DEEPSPEED'] = '0'    # However, sometimes DeepSpeed saves VRAM even for 1 GPU training. So you shall try it.
+    os.environ['RWKV_DEEPSPEED'] = '1'    # However, sometimes DeepSpeed saves VRAM even for 1 GPU training. So you shall try it.
 
 os.environ['USE_WANDB'] = '0' # wandb logging. 0 = False, 1 = True
 
@@ -81,9 +83,9 @@ os.environ['USE_WANDB'] = '0' # wandb logging. 0 = False, 1 = True
 EPOCH_BEGIN = 0 # begins with miniEpoch = EPOCH_BEGIN
 LOAD_MODEL = False # shall we load the #EPOCH_BEGIN model and continue the training from it?
 
-n_layer = 6
-n_embd = 512
-ctx_len = 1024 # increase T_MAX in src/model.py if your ctx_len is longer
+n_layer = int(os.environ['NLAYER']) # 6 / 12 / 24
+n_embd = 1024
+ctx_len = pow(2,n_layer) # increase T_MAX in src/model.py if your ctx_len is longer
 
 model_type = 'RWKV' # 'RWKV' or 'RWKV-ffnPre' (sometimes better)
 
@@ -111,7 +113,7 @@ if EXPRESS_PILE_MODE:
 ########################################################################################################
 
 # if you see "CUDA out of memory", reduce batch_size. Use nvidia-smi to find the highest value for your GPU.
-batch_size = 12 * int(os.environ['RWKV_NUM_GPUS'])
+batch_size = 4 * int(os.environ['RWKV_NUM_GPUS'])
 assert (batch_size % int(os.environ['RWKV_NUM_GPUS']) == 0)
 
 # By default we are using exponential LR decay.
