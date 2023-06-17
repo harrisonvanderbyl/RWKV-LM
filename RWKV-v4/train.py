@@ -3,8 +3,8 @@
 ########################################################################################################
 
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-os.environ["NLAYER"] = "12"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["NLAYER"] = "10"
 import logging, types
 from src.utils import Dataset
 import torch
@@ -35,8 +35,8 @@ EXPRESS_PILE_MODEL_TYPE = 'RWKV-4-Pile-169M'
 
 ########################################################################################################
 
-datafile = "./enwiki8.txt" # your data
-datafile_encoding = 'utf-8' # 'utf-8' / 'utf-16le' / 'numpy' (for fine-tuning pile models) / 'binidx' (the Megatron-LM 'binidx' format)
+datafile = "./train.npy" # your data
+datafile_encoding = 'numpy' # 'utf-8' / 'utf-16le' / 'numpy' (for fine-tuning pile models) / 'binidx' (the Megatron-LM 'binidx' format)
 
 # datafile = 'my-gpt_seq_document'
 # datafile_encoding = 'binidx'
@@ -50,7 +50,7 @@ if EXPRESS_PILE_MODE:
 # set VOCAB_SIZE = 50277 for fine-tuning pile models
 # set VOCAB_SIZE = your_vocab_size for 'binidx' data
 #
-os.environ['VOCAB_SIZE'] = '0'
+os.environ['VOCAB_SIZE'] = '50277'
 if EXPRESS_PILE_MODE:
     os.environ['VOCAB_SIZE'] = '50277'
 
@@ -69,7 +69,7 @@ os.environ['RWKV_NUM_GPUS'] = '1' # num of GPUs to use
 # 'fp32' (!!!very slow!!! only for verification)
 os.environ['RWKV_FLOAT_MODE'] = 'fp16'
 
-os.environ['RWKV_DEEPSPEED'] = '0' # Use DeepSpeed? 0 = False, 1 = True
+os.environ['RWKV_DEEPSPEED'] = '1' # Use DeepSpeed? 0 = False, 1 = True
 
 if int(os.environ['RWKV_NUM_GPUS']) == 1: # Usually you don't need DeepSpeed for 1 GPU training.
     os.environ['RWKV_DEEPSPEED'] = '1'    # However, sometimes DeepSpeed saves VRAM even for 1 GPU training. So you shall try it.
@@ -80,8 +80,8 @@ os.environ['USE_WANDB'] = '0' # wandb logging. 0 = False, 1 = True
 # Step 2: set model details
 ########################################################################################################
 
-EPOCH_BEGIN = 0 # begins with miniEpoch = EPOCH_BEGIN
-LOAD_MODEL = False # shall we load the #EPOCH_BEGIN model and continue the training from it?
+EPOCH_BEGIN = 1 # begins with miniEpoch = EPOCH_BEGIN
+LOAD_MODEL = True # shall we load the #EPOCH_BEGIN model and continue the training from it?
 
 n_layer = int(os.environ['NLAYER']) # 6 / 12 / 24
 n_embd = 1024
@@ -113,7 +113,7 @@ if EXPRESS_PILE_MODE:
 ########################################################################################################
 
 # if you see "CUDA out of memory", reduce batch_size. Use nvidia-smi to find the highest value for your GPU.
-batch_size = 4 * int(os.environ['RWKV_NUM_GPUS'])
+batch_size = 1 * int(os.environ['RWKV_NUM_GPUS'])
 assert (batch_size % int(os.environ['RWKV_NUM_GPUS']) == 0)
 
 # By default we are using exponential LR decay.
@@ -148,7 +148,7 @@ if EXPRESS_PILE_MODE:
 ### misc stuffs ########################################################################################
 
 if LOAD_MODEL and EPOCH_BEGIN > 0: # we are not saving gradients, so let's have some warmup if we load a model
-    warmup_tokens = 50 * ctx_len * batch_size // NUM_GPUS
+    warmup_tokens = 50 * ctx_len * batch_size // int(os.environ['RWKV_NUM_GPUS'])
 else:
     warmup_tokens = 0
 

@@ -193,7 +193,8 @@ class RWKV_TimeMix(torch.jit.ScriptModule):
             self.time_mix_v = nn.Parameter(torch.pow(x, ratio_1_to_almost0) + 0.3 * ratio_0_to_1)
             self.time_mix_r = nn.Parameter(torch.pow(x, 0.5 * ratio_1_to_almost0))
             
-        self.time_shift = nn.ZeroPad2d((0, 0, pow(2,config.n_layer - (layer_id+1)), -(pow(2,config.n_layer - (layer_id+1)))))
+        shiftamount = pow(2,config.n_layer-(layer_id+1))
+        self.time_shift = nn.ZeroPad2d((0, 0, shiftamount, -shiftamount))
 
         self.key = nn.Linear(config.n_embd, attn_sz, bias=False)
         self.value = nn.Linear(config.n_embd, attn_sz, bias=False)
@@ -237,7 +238,8 @@ class RWKV_ChannelMix(torch.jit.ScriptModule):
         super().__init__()
         self.layer_id = layer_id
 
-        self.time_shift = nn.ZeroPad2d((0, 0, 1, -1))
+        shiftamount = pow(2,layer_id)
+        self.time_shift = nn.ZeroPad2d((0, 0, shiftamount, -shiftamount))
 
         with torch.no_grad(): # fancy init of time_mix
             ratio_1_to_almost0 = (1.0 - (layer_id / config.n_layer)) # 1 to ~0
