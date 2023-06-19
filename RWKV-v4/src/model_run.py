@@ -304,18 +304,18 @@ class RWKV_RNN(): # this is running in FP32 at this moment
 
     def FF(self, xx, w, name):
         if name not in self.xx:
-            self.xx[name] = torch.zeros(1,self.n_embd, device=self.RUN_DEVICE)
+            self.xx[name] = torch.zeros(2048,self.n_embd, device=self.RUN_DEVICE)
         layer_id = int(name.split('.')[-1])
         layers = self.xx.keys().__len__()/2
         # print(f'layer_id {layer_id} layers {layers}')
-        #indexxx = pow(2,layer_id)
-        indexxx = pow(2,layers - (layer_id+1))
-        indexx = int(max(-self.xx[name].shape[0],-indexxx))
+        indexxx = pow(2,layer_id)
+        # indexxx = pow(2,layers - (layer_id+1))
+        indexx = -int(indexxx)
         
         # print(f'indexx {indexx}:{layer_id}:{indexxx}:{layers}')
         
-        xk = xx * w.time_mix_k + self.xx[name][indexx] * (1 - w.time_mix_k)
-        xr = xx * w.time_mix_r + self.xx[name][indexx] * (1 - w.time_mix_r)
+        xk = xx * w.time_mix_k + self.xx[name][indexx].squeeze() * (1 - w.time_mix_k)
+        xr = xx * w.time_mix_r + self.xx[name][indexx].squeeze()  * (1 - w.time_mix_r)
         self.xx[name] = torch.cat([ self.xx[name],xx.unsqueeze(0)], dim=0)
 
         r = torch.sigmoid(w.receptance.weight @ xr)
@@ -326,16 +326,16 @@ class RWKV_RNN(): # this is running in FP32 at this moment
 
     def SA(self, xx, w, name):
         if name not in self.xx:
-            self.xx[name] = torch.zeros(1,self.n_embd, device=self.RUN_DEVICE)
+            self.xx[name] = torch.zeros(2048,self.n_embd, device=self.RUN_DEVICE)
             self.aa[name] = torch.zeros(self.n_embd, device=self.RUN_DEVICE)
             self.bb[name] = torch.zeros(self.n_embd, device=self.RUN_DEVICE)
             self.pp[name] = torch.zeros(self.n_embd, device=self.RUN_DEVICE) - 1e30
         layer_id = int(name.split('.')[-1])
         layers = self.xx.keys().__len__()/2
         # print(f'layer_id {layer_id} layers {layers}')
-        indexxx = pow(2,layer_id)
-        # indexxx = pow(2,layers - (layer_id+1))
-        indexx = int(max(-self.xx[name].shape[0],-indexxx))
+        # indexxx = pow(2,layer_id)
+        indexxx = pow(2,layers - (layer_id+1))
+        indexx = int(-indexxx)
         # print(f'indexx {indexx}:{layer_id}:{indexxx}:{layers}')
         xk = xx * w.time_mix_k + self.xx[name][indexx].squeeze() * (1 - w.time_mix_k)
         xv = xx * w.time_mix_v + self.xx[name][indexx].squeeze() * (1 - w.time_mix_v)
