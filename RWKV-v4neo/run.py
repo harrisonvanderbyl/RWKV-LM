@@ -58,9 +58,9 @@ vocab_size = 50277
 # n_embd = 2560
 # ctx_len = 1024
 
-MODEL_NAME = './1.3'
+MODEL_NAME = './rwkv-10'
 n_layer = 6
-n_embd = 2048
+n_embd = 512
 ctx_len = 1024
 
 args.MODEL_NAME = MODEL_NAME
