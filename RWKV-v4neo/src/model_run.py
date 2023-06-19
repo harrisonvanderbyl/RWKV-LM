@@ -119,24 +119,24 @@ class RWKV_RNN(MyModule):
     # state[] 0=ffn_xx 1=att_xx 2=att_aa 3=att_bb 4=att_pp
 
     @MyFunction
-    def FF(self, x, state, i:int, time_mix_k, time_mix_r, kw, vw, rw):
+    def FF(self, x, state:List[torch.Tensor], i:int, time_mix_k, time_mix_r, kw, vw, rw):
         
         indexxx = pow(2,i)
         # indexxx = pow(2,layers - (layer_id+1))
-        indexx = -int(indexxx)
+        indexx = -int(indexxx) - 1
 
         if self.FLOAT_MODE == "bf16":
-            xk = x * time_mix_k + state[indexx].type(torch.bfloat16) * (1 - time_mix_k)
-            xr = x * time_mix_r + state[indexx].type(torch.bfloat16) * (1 - time_mix_r)
-            state = torch.cat([ state,x.float().unsqueeze(0)], dim=0)
+            xk = x * time_mix_k + state[1][i][indexx].type(torch.bfloat16) * (1 - time_mix_k)
+            xr = x * time_mix_r + state[1][i][indexx].type(torch.bfloat16) * (1 - time_mix_r)
+            state[1][i][-1] = x.float()
         elif self.FLOAT_MODE == "fp16":
-            xk = x * time_mix_k + state[indexx].half() * (1 - time_mix_k)
-            xr = x * time_mix_r + state[indexx].half() * (1 - time_mix_r)
-            state = torch.cat([ state,x.float().unsqueeze(0)], dim=0)            
+            xk = x * time_mix_k + state[1][i][indexx].half() * (1 - time_mix_k)
+            xr = x * time_mix_r + state[1][i][indexx].half() * (1 - time_mix_r)
+            state[1][i][-1] = x.float()           
         else:
-            xk = x * time_mix_k + state[indexx] * (1 - time_mix_k)
-            xr = x * time_mix_r + state[indexx] * (1 - time_mix_r)
-            state = torch.cat([ state,x.float().unsqueeze(0)], dim=0)
+            xk = x * time_mix_k + state[1][i][indexx] * (1 - time_mix_k)
+            xr = x * time_mix_r + state[1][i][indexx] * (1 - time_mix_r)
+            state[1][i][-1] = x.float()
 
         r = torch.sigmoid(rw @ xr)
         k = torch.square(torch.relu(kw @ xk))
@@ -145,30 +145,30 @@ class RWKV_RNN(MyModule):
         return r * kv
 
     @MyFunction
-    def SA(self, x, state, i:int, time_mix_k, time_mix_v, time_mix_r, time_first, time_decay, kw, vw, rw, ow):
+    def SA(self, x, state:List[torch.Tensor], i:int, time_mix_k, time_mix_v, time_mix_r, time_first, time_decay, kw, vw, rw, ow, layers:int = 6):
         
-        layers = self.args.n_layer
+        
         # print(f'layer_id {layer_id} layers {layers}')
         # indexxx = pow(2,layer_id)
         indexxx = pow(2,layers - (i+1))
-        indexx = int(-indexxx)
+        indexx = int(-indexxx) - 1
 
         if self.FLOAT_MODE == "bf16":
-            xk = x * time_mix_k + state[indexx].type(torch.bfloat16) * (1 - time_mix_k)
-            xv = x * time_mix_v + state[indexx].type(torch.bfloat16) * (1 - time_mix_v)
-            xr = x * time_mix_r + state[indexx].type(torch.bfloat16) * (1 - time_mix_r)
+            xk = x * time_mix_k + state[2][i][indexx].type(torch.bfloat16) * (1 - time_mix_k)
+            xv = x * time_mix_v + state[2][i][indexx].type(torch.bfloat16) * (1 - time_mix_v)
+            xr = x * time_mix_r + state[2][i][indexx].type(torch.bfloat16) * (1 - time_mix_r)
             
-            state = torch.cat([ state,x.float().unsqueeze(0)], dim=0)
+            state[2][i][-1] = x.float()
         elif self.FLOAT_MODE == "fp16":
-            xk = x * time_mix_k + state[indexx].half() * (1 - time_mix_k)
-            xv = x * time_mix_v + state[indexx].half() * (1 - time_mix_v)
-            xr = x * time_mix_r + state[indexx].half() * (1 - time_mix_r)
-            state = torch.cat([ state,x.float().unsqueeze(0)], dim=0)           
+            xk = x * time_mix_k + state[2][i][indexx].half() * (1 - time_mix_k)
+            xv = x * time_mix_v + state[2][i][indexx].half() * (1 - time_mix_v)
+            xr = x * time_mix_r + state[2][i][indexx].half() * (1 - time_mix_r)
+            state[2][i][-1] = x.float()         
         else:
-            xk = x * time_mix_k + state[indexx] * (1 - time_mix_k)
-            xv = x * time_mix_v + state[indexx] * (1 - time_mix_v)
-            xr = x * time_mix_r + state[indexx] * (1 - time_mix_r)
-            state = torch.cat([ state,x.float().unsqueeze(0)], dim=0)
+            xk = x * time_mix_k + state[2][i][indexx] * (1 - time_mix_k)
+            xv = x * time_mix_v + state[2][i][indexx] * (1 - time_mix_v)
+            xr = x * time_mix_r + state[2][i][indexx] * (1 - time_mix_r)
+            state[2][i][-1] = x.float()
 
         r = torch.sigmoid(rw @ xr)
         k = kw @ xk
@@ -180,9 +180,9 @@ class RWKV_RNN(MyModule):
         else:
             kk = k
             vv = v
-        aa = state[5*i+2]
-        bb = state[5*i+3]
-        pp = state[5*i+4]
+        aa = state[0][5*i+2]
+        bb = state[0][5*i+3]
+        pp = state[0][5*i+4]
         ww = time_first + kk
         p = torch.maximum(pp, ww)
         e1 = torch.exp(pp - p)
@@ -193,9 +193,9 @@ class RWKV_RNN(MyModule):
         p = torch.maximum(ww, kk)
         e1 = torch.exp(ww - p)
         e2 = torch.exp(kk - p)
-        state[5*i+2] = e1 * aa + e2 * vv
-        state[5*i+3] = e1 * bb + e2
-        state[5*i+4] = p
+        state[0][5*i+2] = e1 * aa + e2 * vv
+        state[0][5*i+3] = e1 * bb + e2
+        state[0][5*i+4] = p
         if self.FLOAT_MODE == "bf16":
             wkv = (a / b).type(torch.bfloat16)
         elif self.FLOAT_MODE == "fp16":
@@ -221,22 +221,23 @@ class RWKV_RNN(MyModule):
 
             if state == None:
                 state = [torch.zeros(args.n_layer * 5, args.n_embd, device=self.RUN_DEVICE),
-                         torch.zeros(args.n_layer, 1, args.n_embd, device=self.RUN_DEVICE),
-                            torch.zeros(args.n_layer, 1, args.n_embd, device=self.RUN_DEVICE),]
+                         torch.zeros(args.n_layer, pow(2,args.n_layer), args.n_embd, device=self.RUN_DEVICE),
+                            torch.zeros(args.n_layer, pow(2,args.n_layer), args.n_embd, device=self.RUN_DEVICE),]
                 for i in range(args.n_layer):
                     state[0][5*i+4] -= 1e30
-
+            state[1] = state[1].roll(-1, dims=1)
+            state[2] = state[2].roll(-1, dims=1)
             for i in range(args.n_layer):
                 if i == 0:
                     x = self.LN(x, w.blocks[i].ln0)
                 
                 ww = w.blocks[i].att
-                x = x + self.SA(self.LN(x, w.blocks[i].ln1), state[1], i, 
+                x = x + self.SA(self.LN(x, w.blocks[i].ln1), state, i, 
                     ww.time_mix_k, ww.time_mix_v, ww.time_mix_r, ww.time_first, ww.time_decay, 
                     ww.key.weight, ww.value.weight, ww.receptance.weight, ww.output.weight)
                 
                 ww = w.blocks[i].ffn
-                x = x + self.FF(self.LN(x, w.blocks[i].ln2), state[1], i, 
+                x = x + self.FF(self.LN(x, w.blocks[i].ln2), state, i, 
                     ww.time_mix_k, ww.time_mix_r, 
                     ww.key.weight, ww.value.weight, ww.receptance.weight)
                 

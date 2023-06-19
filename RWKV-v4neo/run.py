@@ -20,19 +20,19 @@ args = types.SimpleNamespace()
 # Step 1: set model & config (use v4 to run your trained-from-scratch models. v4 and v4neo are compatible)
 ########################################################################################################
 
-args.RUN_DEVICE = "cuda" # 'cuda' // 'cpu' (already fast)
-args.FLOAT_MODE = "fp16" # fp16 (good for GPU, does not work for CPU) // fp32 (good for CPU) // bf16 (less accurate, but works for CPU)
+args.RUN_DEVICE = "cpu" # 'cuda' // 'cpu' (already fast)
+args.FLOAT_MODE = "fp32" # fp16 (good for GPU, does not work for CPU) // fp32 (good for CPU) // bf16 (less accurate, but works for CPU)
 
 # if args.RUN_DEVICE == "cuda":
 #     os.environ["RWKV_RUN_BACKEND"] = 'nvfuser' # !!!BUGGY!!! wrong output
 os.environ["RWKV_JIT_ON"] = '1' # '1' or '0'. very useful for GPU/CPU fp32, but might be harmful for GPU fp16. please benchmark !!!
 
-TOKEN_MODE = "pile"
-WORD_NAME = [
-    "20B_tokenizer.json",
-    "20B_tokenizer.json",
-]  # [vocab, vocab] for Pile model
-UNKNOWN_CHAR = None
+TOKEN_MODE = "char"
+WORD_NAME = "vocab"
+    #"20B_tokenizer.json",
+    # "20B_tokenizer.json",
+  # [vocab, vocab] for Pile model
+UNKNOWN_CHAR = "a" # '\ue083' for Pile model
 vocab_size = 50277
 
 # Download Pile models: https://huggingface.co/BlinkDL
@@ -58,9 +58,9 @@ vocab_size = 50277
 # n_embd = 2560
 # ctx_len = 1024
 
-MODEL_NAME = '/fsx/BlinkDL/HF-MODEL/rwkv-4-pile-7b/RWKV-4-Pile-7B-20221115-8047'
-n_layer = 32
-n_embd = 4096
+MODEL_NAME = './1.3'
+n_layer = 6
+n_embd = 2048
 ctx_len = 1024
 
 args.MODEL_NAME = MODEL_NAME
@@ -201,7 +201,7 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
 
         if i == src_len:
             out = init_out.clone()
-            state = init_state.clone()
+            state = [s.clone() for s in init_state]
         else:
             out, state = model.forward(x, state)
         if DEBUG_DEBUG:
