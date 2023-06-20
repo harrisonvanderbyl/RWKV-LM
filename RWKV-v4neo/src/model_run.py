@@ -234,7 +234,7 @@ class RWKV_RNN(MyModule):
                 ww = w.blocks[i].att
                 x = x + self.SA(self.LN(x, w.blocks[i].ln1), state, i, 
                     ww.time_mix_k, ww.time_mix_v, ww.time_mix_r, ww.time_first, ww.time_decay, 
-                    ww.key.weight, ww.value.weight, ww.receptance.weight, ww.output.weight)
+                    ww.key.weight, ww.value.weight, ww.receptance.weight, ww.output.weight, args.n_layer)
                 
                 ww = w.blocks[i].ffn
                 x = x + self.FF(self.LN(x, w.blocks[i].ln2), state, i, 

@@ -27,12 +27,11 @@ args.FLOAT_MODE = "fp32" # fp16 (good for GPU, does not work for CPU) // fp32 (g
 #     os.environ["RWKV_RUN_BACKEND"] = 'nvfuser' # !!!BUGGY!!! wrong output
 os.environ["RWKV_JIT_ON"] = '1' # '1' or '0'. very useful for GPU/CPU fp32, but might be harmful for GPU fp16. please benchmark !!!
 
-TOKEN_MODE = "char"
-WORD_NAME = "vocab"
-    #"20B_tokenizer.json",
-    # "20B_tokenizer.json",
+TOKEN_MODE = "pile"
+WORD_NAME = ["20B_tokenizer.json"
+    ,"20B_tokenizer.json"]
   # [vocab, vocab] for Pile model
-UNKNOWN_CHAR = "a" # '\ue083' for Pile model
+UNKNOWN_CHAR = None # '\ue083' for Pile model
 vocab_size = 50277
 
 # Download Pile models: https://huggingface.co/BlinkDL
@@ -58,9 +57,9 @@ vocab_size = 50277
 # n_embd = 2560
 # ctx_len = 1024
 
-MODEL_NAME = './rwkv-10'
-n_layer = 6
-n_embd = 512
+MODEL_NAME = './rwkv-15'
+n_layer = 12
+n_embd = 768
 ctx_len = 1024
 
 args.MODEL_NAME = MODEL_NAME
