@@ -57,9 +57,9 @@ vocab_size = 50277
 # n_embd = 2560
 # ctx_len = 1024
 
-MODEL_NAME = './rwkv-15'
-n_layer = 12
-n_embd = 768
+MODEL_NAME = './rwkv-20'
+n_layer = 8
+n_embd = 1024
 ctx_len = 1024
 
 args.MODEL_NAME = MODEL_NAME
@@ -80,7 +80,7 @@ os.environ["RWKV_RUN_DEVICE"] = args.RUN_DEVICE
 # context = 'A'
 # context = "\nIn the"
 # context = '\nSugar:'
-context = "\nIn a shocking finding, scientist discovered a herd of dragons living in a remote, previously unexplored valley, in Tibet. Even more surprising to the researchers was the fact that the dragons spoke perfect Chinese."
+context = "\nBeta radiation is"
 
 # context = "\n深圳是" # test Chinese
 # context = "\n東京は" # test Japanese

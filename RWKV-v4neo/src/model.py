@@ -172,7 +172,9 @@ class RWKV_TimeMix(MyModule):
             self.time_mix_r = nn.Parameter(torch.pow(ddd, 0.5 * ratio_1_to_almost0))
 
 
-        shiftamount = pow(2,args.n_layer-(layer_id+1))
+        #shiftamount = pow(2,args.n_layer-(layer_id+1))
+        shiftamount = pow(2,layer_id)
+        #print(shiftamount)
         self.time_shift = nn.ZeroPad2d((0, 0, shiftamount, -shiftamount))
         self.key = nn.Linear(args.n_embd, args.dim_att, bias=False)
         self.value = nn.Linear(args.n_embd, args.dim_att, bias=False)
@@ -252,7 +254,9 @@ class RWKV_ChannelMix(MyModule):
         self.args = args
         self.layer_id = layer_id
         
-        shiftamount = pow(2,layer_id)
+        #shiftamount = pow(2,layer_id)
+        shiftamount = pow(2,args.n_layer-(layer_id+1))
+        
         self.time_shift = nn.ZeroPad2d((0, 0, shiftamount, -shiftamount))
 
 

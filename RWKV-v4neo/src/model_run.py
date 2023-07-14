@@ -225,9 +225,10 @@ class RWKV_RNN(MyModule):
                             torch.zeros(args.n_layer, pow(2,args.n_layer), args.n_embd, device=self.RUN_DEVICE),]
                 for i in range(args.n_layer):
                     state[0][5*i+4] -= 1e30
-            state[1] = state[1].roll(-1, dims=1)
-            state[2] = state[2].roll(-1, dims=1)
+            
             for i in range(args.n_layer):
+                state[1][i] = state[1][i].roll(-1, dims=0)
+                state[2][i] = state[2][i].roll(-1, dims=0)
                 if i == 0:
                     x = self.LN(x, w.blocks[i].ln0)
                 
