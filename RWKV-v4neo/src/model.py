@@ -77,7 +77,7 @@ class BlockStateList:
 
     def __getitem__(self, layer: int):
         return BlockState(
-            TimeMixState(self.shift_states[layer], self.wkv_states[layer]),
+            TimeMixState(self.shift_states[layer, 0], self.wkv_states[layer]),
             ChannelMixState(self.shift_states[layer, 1]))
 
     def __setitem__(self, layer: int, state: BlockState):
