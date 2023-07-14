@@ -77,7 +77,7 @@ class BlockStateList:
 
     def __getitem__(self, layer: int):
         return BlockState(
-            TimeMixState(self.shift_states[layer, 0], self.wkv_states[layer]),
+            TimeMixState(self.shift_states[layer], self.wkv_states[layer]),
             ChannelMixState(self.shift_states[layer, 1]))
 
     def __setitem__(self, layer: int, state: BlockState):
@@ -132,11 +132,16 @@ class RWKV_TimeMix(MyModule):
         self.receptance = nn.Linear(n_embd, dim_att, bias=False)
         self.output = nn.Linear(dim_att, n_embd, bias=False)
 
+        shiftamount = pow(2,layer_id)
+        #print(shiftamount)
+        self.time_shift = nn.ZeroPad2d((0, 0, shiftamount, -shiftamount))
+
     @MyFunction
     def forward(self, x, last_state: TimeMixState):
         # Mix x with the previous timestep to produce xk, xv, xr
-        xx = torch.concat((last_state.shift_state.unsqueeze(1), x[:, :-1]),
+        xxx = torch.concat((last_state, x),
                           dim=1)
+        xx = self.time_shift(xxx)
         xk = x * self.time_mix_k + xx * (1 - self.time_mix_k)
         xv = x * self.time_mix_v + xx * (1 - self.time_mix_v)
         xr = x * self.time_mix_r + xx * (1 - self.time_mix_r)
@@ -149,7 +154,7 @@ class RWKV_TimeMix(MyModule):
 
         y, new_wkv_state = torch.ops.rwkv.wkv(self.time_decay, self.time_first,
                                               k, v, last_state.wkv_state)
-        return self.output(sr * y), TimeMixState(x[:, -1], new_wkv_state)
+        return self.output(sr * y), TimeMixState(xxx, new_wkv_state)
 
 
 ########################################################################################################
