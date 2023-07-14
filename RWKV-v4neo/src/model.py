@@ -228,12 +228,22 @@ class RWKV_TimeMix(JITModClass):
         self.receptance = nn.Linear(n_embd, dim_att, bias=False)
         self.output = nn.Linear(dim_att, n_embd, bias=False)
 
+        # RWKV-5 : Token shift experiment
+        shiftamount = pow(2,layer_id)
+        self.time_shift = nn.ZeroPad2d((0, 0, shiftamount, -shiftamount))
+
     @JITModMethod
     @TCompileMax
     def _forward_kvsr(self, x, last_state: TimeMixState):
-        # Mix x with the previous timestep to produce xk, xv, xr
-        xx = torch.concat((last_state.shift_state.unsqueeze(1), x[:, :-1]),
-                          dim=1)
+
+        # RWKV-5 token shift experiment
+        xxx = torch.concat((last_state, x), dim=1)
+        xx = self.time_shift(xxx)
+        # # Mix x with the previous timestep to produce xk, xv, xr
+        # xx = torch.concat((last_state.shift_state.unsqueeze(1), x[:, :-1]),
+        #                   dim=1)
+
+
         xk = x * self.time_mix_k + xx * (1 - self.time_mix_k)
         xv = x * self.time_mix_v + xx * (1 - self.time_mix_v)
         xr = x * self.time_mix_r + xx * (1 - self.time_mix_r)
@@ -244,7 +254,9 @@ class RWKV_TimeMix(JITModClass):
 
         sr = torch.sigmoid(r)
 
-        return k, v, sr
+        # RWKV-5 token shift experiment
+        return k, v, sr, xxx
+        # return k, v, sr
 
     @JITModMethod
     @TCompileMax
@@ -254,10 +266,16 @@ class RWKV_TimeMix(JITModClass):
     @JITModMethod
     @TCompileBaseline
     def forward(self, x, last_state: TimeMixState):
-        k, v, sr = self._forward_kvsr(x, last_state)
+        # RWKV-5 token shift experiment
+        k, v, sr, xxx = self._forward_kvsr(x, last_state)
+        # k, v, sr = self._forward_kvsr(x, last_state)
+
         y, new_wkv_state = wkv_op(self.time_decay, self.time_first,
                                   k, v, last_state.wkv_state)
-        return self._forward_out(sr, y, x[:, -1], new_wkv_state)
+        
+        # RWKV-5 token shift experiment
+        return self._forward_out(sr, y, xxx, new_wkv_state)
+        # return self._forward_out(sr, y, x[:, -1], new_wkv_state)
 
 
 ########################################################################################################
