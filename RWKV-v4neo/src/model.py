@@ -1044,8 +1044,8 @@ class RWKV(L.LightningModule):
                         targets[:, i * segment_size:(i + 1) * segment_size],
                         seq_mask[:, i * segment_size:(i + 1) * segment_size],
                         total_loss,
-                        states.shift_states.att_shift_states,
-                        states.shift_states.ffn_shift_states,
+                        states.att_shift_states,
+                        states.ffn_shift_states,
                         states.wkv_states,
                         steps,
                     )
@@ -1055,8 +1055,8 @@ class RWKV(L.LightningModule):
                         targets[:, i * segment_size:(i + 1) * segment_size],
                         seq_mask[:, i * segment_size:(i + 1) * segment_size],
                         total_loss,
-                        states.shift_states.att_shift_states,
-                        states.shift_states.ffn_shift_states,
+                        states.att_shift_states,
+                        states.ffn_shift_states,
                         states.wkv_states,
                         steps,
                     )
