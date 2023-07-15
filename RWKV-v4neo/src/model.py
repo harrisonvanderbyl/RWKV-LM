@@ -257,8 +257,8 @@ class RWKV_TimeMix(JITModClass):
     def _forward_kvsr(self, x, last_state: TimeMixState):
 
         # Print the various shapes for debugging
-        print("x shape: ", x.shape)
-        print("last_state shape: ", last_state.wkv_state.shape)
+        print("x shape: ", x.shape) # eg. [1, 2606, 2560]
+        print("last_state shape: ", last_state.wkv_state.shape) # eg. [1, 2560, 3]
 
         #% RWKV-5x token shift experiment %#
         xxx = torch.concat((last_state.shift_state, x), dim=1)
