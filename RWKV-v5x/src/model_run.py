@@ -33,7 +33,7 @@ RWKV_RESCALE_LAYER = 6 # set x=x/2 every X layer
 ############################################################################################################
 
 class RWKV_RNN(MyModule):
-    def __init__(self, args):
+    def __init__(self, args, _torch_load=None):
         super().__init__()
 
         self.args = args
@@ -41,7 +41,10 @@ class RWKV_RNN(MyModule):
         self.RUN_DEVICE = args.RUN_DEVICE
 
         with torch.no_grad():
-            w = torch.load(args.MODEL_NAME + '.pth', map_location='cpu')
+            if _torch_load is None:
+                w = torch.load(args.MODEL_NAME + '.pth', map_location='cpu')
+            else:
+                w = _torch_load
             # refine weights and send to correct device
             keys = list(w.keys())
             if 'pos_emb_x' in keys:
