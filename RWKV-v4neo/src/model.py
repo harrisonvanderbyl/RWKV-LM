@@ -256,6 +256,10 @@ class RWKV_TimeMix(JITModClass):
     @TCompileMax
     def _forward_kvsr(self, x, last_state: TimeMixState):
 
+        # Print the various shapes for debugging
+        print("x shape: ", x.shape)
+        print("last_state shape: ", last_state.wkv_state.shape)
+
         #% RWKV-5x token shift experiment %#
         xxx = torch.concat((last_state.shift_state, x), dim=1)
         xx = self.time_shift(xxx)
