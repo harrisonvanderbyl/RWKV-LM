@@ -31,5 +31,5 @@ if __name__ == "__main__":
     dragon_prompt = "\nIn a shocking finding, scientist discovered a herd of dragons living in a remote, previously unexplored valley, in Tibet. Even more surprising to the researchers was the fact that the dragons spoke perfect Chinese."
     print("Prompt: ") 
     print("", end="")
-    out_str = model.completion(dragon_prompt, max_tokens=200, temperature=1.0, top_p=0.9, stream_to_stdout=True)
-    # print(out_str)
+    model.completion(dragon_prompt, max_tokens=200, temperature=1.0, top_p=0.9, stream_to_stdout=True)
+    

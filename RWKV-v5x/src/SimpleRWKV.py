@@ -8,6 +8,10 @@ os.environ["RWKV_RUN_DEVICE"] = "cpu"
 from .model_run import RWKV_RNN
 from .utils import TOKENIZER
 
+# Current script dir
+SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
+SCRIPT_PARENT_DIR = os.path.abspath(os.path.join(SCRIPT_DIR, '../'))
+
 #
 # SimpleRWKV wrapper, used to provide a simple inference interfcate to the RWKV model
 #
@@ -26,8 +30,9 @@ class SimpleRWKV:
 
         # Setup the tokenizer
         if tokenizer == "pile":
+            tokenizer_file = os.path.join(SCRIPT_PARENT_DIR,"20B_tokenizer.json")
             tokenizer = TOKENIZER(
-                ["20B_tokenizer.json","20B_tokenizer.json"],
+                [tokenizer_file,tokenizer_file],
                 UNKNOWN_CHAR = None
             )
             vocab_size = 50277
@@ -70,17 +75,59 @@ class SimpleRWKV:
         args.FLOAT_MODE = dtype
         self.model = RWKV_RNN(args, _torch_load=_torch_load)
 
+    # Encoding strings
+    def encode(self, text: str):
+        return self.tokenizerCtx.tokenizer.encode(text)
+
+    # Decoding strings
+    def decode(self, tokens: list):
+        return self.tokenizerCtx.tokenizer.decode(tokens)
+
+    # Forwarding logic
+    def forward(self, tokens:list, inState=None):
+        logits = None
+        state = inState
+        token_len = len(tokens)
+        
+        # For each token, process the state
+        for i in range(token_len):
+            logits, state = self.model([tokens[i]], state)    
+
+        # Return the logits and state
+        return logits, state
+    
+    # Sampling logits
+    def sample_logits(self, logits, full_tokens=[0], temperature=1.0, top_p=0.9):
+        if temperature > 0.0:
+            ttt = self.tokenizerCtx.sample_logits(
+                logits, full_tokens,
+                None, # this was ctx_len, but the var is not in use
+                temperature=temperature, top_p_usual=top_p, top_p_newline=top_p
+            )
+        else: 
+            # Since the tokenizer sample does not support temp==0
+            # we handle this case ourself, by fining the top token
+            ttt = torch.argmax(logits, dim=-1).item()
+        return ttt
+
     # Completion API
     def completion(self, 
-            prompt: str, 
+            prompt, 
             max_tokens: int = 32,
             temperature: float = 1.0,
             top_p: float = 0.9,
             start_state = None,
             stream_to_stdout: bool = False,
         ):
-        # Encode the context
-        enc = self.tokenizerCtx.tokenizer.encode(prompt)
+        # Encode the context, if its a string
+        if isinstance(prompt, str):
+            enc = self.tokenizerCtx.tokenizer.encode(prompt)
+        # Check if the prompt is a list of tokens
+        elif isinstance(prompt, list):
+            enc = prompt
+        else:
+            raise ValueError("Prompt must be a string or a list of tokens")
+
         enc_len = len(enc)
 
         # Keep track of the logits and state

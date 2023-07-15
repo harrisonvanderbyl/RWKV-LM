@@ -47,11 +47,11 @@ model = RWKV(model=model_path, strategy=model_run_strat)
 pipeline = PIPELINE(model, tokenizer_path) 
 
 # Get the cursed " on" token
-on_token = pipeline.encode(" on")[0]
+# on_token = pipeline.encode(" on")[0]
 markdown_token = pipeline.encode("```")[0]
 
 # Pipeline args to use
-token_ban = [on_token] # ban the generation of some tokens
+token_ban = [] # [on_token] # ban the generation of some tokens
 pipeline_args = PIPELINE_ARGS(
                      temperature = 0.2, top_p = 0.2, 
                      top_k = 1, # top_k = 0 then ignore
