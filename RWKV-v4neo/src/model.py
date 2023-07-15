@@ -177,8 +177,10 @@ class BlockStateList:
                                  device=device,
                                  dtype=torch.float)
         
-        shift_states = torch.empty((N, B, C), device=device, dtype=dtype)
-        return BlockStateList(shift_states, shift_states.clone(), wkv_states)
+        # HOT FIX 2**12, 12 should = layer count
+        att_shift_states = torch.empty((N, B, 2**12, C), device=device, dtype=dtype)
+        ffn_shift_states = torch.empty((N, B, 1, C), device=device, dtype=dtype)
+        return BlockStateList(att_shift_states, ffn_shift_states, wkv_states)
 
     def __getitem__(self, layer: int):
         return BlockState(
@@ -186,7 +188,12 @@ class BlockStateList:
             ChannelMixState(self.ffn_shift_states[layer]))
 
     def __setitem__(self, layer: int, state: BlockState):
-        self.att_shift_states[layer] = state.time_mix_state.shift_state
+        # HOT FIX 2**12, 12 should = layer count
+        # print("[__setitem__] layer", layer)
+        # print("[__setitem__] state.time_mix_state.shift_state", state.time_mix_state.shift_state.shape)
+        # print("[__setitem__] self.att_shift_states[layer]", self.att_shift_states[layer].shape)
+
+        self.att_shift_states[layer] = state.time_mix_state.shift_state[:,-(2**12):,:]
         self.wkv_states[layer] = state.time_mix_state.wkv_state
         self.ffn_shift_states[layer] = state.channel_mix_state.shift_state
 
@@ -241,11 +248,25 @@ class RWKV_TimeMix(JITModClass):
     def _forward_kvsr(self, x, last_state: TimeMixState):
 
         # Print the various shapes for debugging
-        print("x shape: ", x.shape) # eg. [1, 2606, 2560]
-        print("last_state shape: ", last_state.wkv_state.shape) # eg. [1, 2560, 3]
-
+        # print("")
+        # print("x shape: ", x.shape) # eg. [1, 2909, 2560]
+        # print("last_state.wkv_state: ", last_state.wkv_state.shape) # eg. [1, 2560, 3]
+        # print("last_state.shift_state: ", last_state.shift_state.shape) # eg. [4096, 1, 2560]
+        # print("last_state.shift_state.unsqueeze(0): ", last_state.shift_state.unsqueeze(0).shape) # eg. [1, 1, 2560]
+        
         xxx = torch.concat((last_state.shift_state, x), dim=1)
-        xx = self.time_shift(xxx)
+        
+        xxxx = self.time_shift(xxx)
+        xx = xxxx[:, -x.shape[1]:, :]
+        # xx = xxxx.view(x.shape[0], x.shape[1], x.shape[2])
+        # print( "xxxx shape: ", xxxx.shape) # eg. [1, 2582, 2560]
+        # print( "xxx shape: ", xxx.shape) # eg. [1, 2582, 2560]
+        # print( "xx.shape: ", xx.shape) # eg. [1, 2582, 2560]
+        # print( "x.shape: ", x.shape) # eg. [1, 2488, 2560]
+        # print( "self.time_mix_k.shape: ", self.time_mix_k.shape)
+
+        # last_state.shift_state
+        # xx
 
         xk = x * self.time_mix_k + xx * (1 - self.time_mix_k)
         xv = x * self.time_mix_v + xx * (1 - self.time_mix_v)
@@ -297,8 +318,15 @@ class RWKV_ChannelMix(JITModClass):
     @JITModMethod
     @TCompileMax
     def forward(self, x, last_state: ChannelMixState):
-        xx = torch.concat((last_state.shift_state.unsqueeze(1), x[:, :-1]),
+        xx = torch.concat((last_state.shift_state, x[:, :-1]),
                           dim=1)
+        
+        # print("[CM] x shape: ", x.shape)
+        # print("[CM] last_state.shift_state shape: ", last_state.shift_state.shape)
+        # print("[CM] xx shape: ", xx.shape)
+        # print("[CM] self.time_mix_k shape: ", self.time_mix_k.shape)
+        # print("[CM] self.time_mix_r shape: ", self.time_mix_r.shape)
+
         xk = x * self.time_mix_k + xx * (1 - self.time_mix_k)
         xr = x * self.time_mix_r + xx * (1 - self.time_mix_r)
         k = self.key(xk)
