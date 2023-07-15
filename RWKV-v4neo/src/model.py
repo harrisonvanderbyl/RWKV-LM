@@ -177,7 +177,8 @@ class BlockStateList:
                                  device=device,
                                  dtype=torch.float)
         
-        shift_states = torch.empty((N, B, C), device=device, dtype=dtype)
+        shift_states = torch.empty((N, 1, B, C), device=device, dtype=dtype)
+        
         return BlockStateList(shift_states, shift_states.clone(), wkv_states)
 
     def __getitem__(self, layer: int):
