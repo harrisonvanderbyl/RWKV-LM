@@ -36,9 +36,8 @@ trainer:
     class_path: lightning.pytorch.loggers.WandbLogger
     init_args:
       name: 'TokenShift-A memory-finetune-1 (bs=256, train-ctx=512)'
-      # name: 'TokenShift-A Foundation'
-      project: 'RWKV-Memory-Experiment'
-      tags: ['RWKV', 'memory-exp']
+      project: 'RWKV-5X-Experiments'
+      tags: ['RWKV', 'RWKV-5X']
       id: null
       save_dir: .
       version: null

@@ -35,10 +35,9 @@ trainer:
   logger:
     class_path: lightning.pytorch.loggers.WandbLogger
     init_args:
-      name: 'Echo-B-1B4 memory-finetune-3 (bs=256, train-ctx=1024)'
-      # name: 'Echo-B-1B4 Foundation'
-      project: 'RWKV-Memory-Experiment'
-      tags: ['RWKV', 'memory-exp']
+      name: 'TokenShift-A memory-finetune-3 (bs=256, train-ctx=1024)'
+      project: 'RWKV-5X-Experiments'
+      tags: ['RWKV', 'RWKV-5X']
       id: null
       save_dir: .
       version: null
@@ -80,7 +79,7 @@ trainer:
       # which will create a `rwkv_model.pth` in the checkpoint directory.
       #
       # Do not use the `zero_to_fp32.py` script as that will have export format issues
-      dirpath: ../checkpoint/Echo-B-1B4-mem-finetune-3/
+      dirpath: ../checkpoint/TokenShift-A-mem-finetune-3/
       filename: null
       
       # Save the top/last K checkpoints
@@ -176,7 +175,7 @@ trainer:
 ########################################
 model:
   # Model to start the finetune/training process from
-  load_model: ../model/Echo-B-1B4-Tune2.pth
+  load_model: ../model/TokenShift-A-Tune2.pth
 
   # The model size setting, this MUST match
   # your current model settings, refer to the model card
