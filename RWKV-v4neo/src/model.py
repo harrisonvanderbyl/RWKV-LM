@@ -153,15 +153,11 @@ class BlockState:
 
 class BlockStateList:
 
-    #% RWKV-5x token shift experiment %#
     def __init__(self, att_shift_states, ffn_shift_states, wkv_states):
         self.wkv_states = wkv_states
         self.att_shift_states = att_shift_states
         self.ffn_shift_states = ffn_shift_states
-    # def __init__(self, shift_states, wkv_states):
-    #     self.wkv_states = wkv_states
-    #     self.shift_states = shift_states
-
+    
     # @ TCompileMax (no difference)
     @staticmethod
     def create(N, B, C, device, dtype):
@@ -169,10 +165,8 @@ class BlockStateList:
         result.wkv_states[:] = 0
         result.wkv_states[:, :, :, -1] = -1e38
 
-        #% RWKV-5x token shift experiment %#
         result.att_shift_states[:] = 0
         result.ffn_shift_states[:] = 0
-        # result.shift_states[:] = 0
 
         return result
 
@@ -182,29 +176,19 @@ class BlockStateList:
         wkv_states = torch.empty((N, B, C, 3),
                                  device=device,
                                  dtype=torch.float)
-        #% RWKV-5x token shift experiment %#
+        
         shift_states = torch.empty((N, B, C), device=device, dtype=dtype)
         return BlockStateList(shift_states, shift_states.clone(), wkv_states)
-        # shift_states = torch.empty((N, 2, B, C), device=device, dtype=dtype)
-        # return BlockStateList(shift_states, wkv_states)
 
     def __getitem__(self, layer: int):
-        #% RWKV-5x token shift experiment %#
         return BlockState(
             TimeMixState(self.att_shift_states[layer], self.wkv_states[layer]),
             ChannelMixState(self.ffn_shift_states[layer]))
-        # return BlockState(
-        #     TimeMixState(self.shift_states[layer, 0], self.wkv_states[layer]),
-        #     ChannelMixState(self.shift_states[layer, 1]))
 
     def __setitem__(self, layer: int, state: BlockState):
-        #% RWKV-5x token shift experiment %#
         self.att_shift_states[layer] = state.time_mix_state.shift_state
         self.wkv_states[layer] = state.time_mix_state.wkv_state
         self.ffn_shift_states[layer] = state.channel_mix_state.shift_state
-        # self.shift_states[layer, 0] = state.time_mix_state.shift_state
-        # self.wkv_states[layer] = state.time_mix_state.wkv_state
-        # self.shift_states[layer, 1] = state.channel_mix_state.shift_state
 
 ########################################################################################################
 # RWKV: RWKV Time-mix + RWKV Channel-mix
@@ -260,12 +244,8 @@ class RWKV_TimeMix(JITModClass):
         print("x shape: ", x.shape) # eg. [1, 2606, 2560]
         print("last_state shape: ", last_state.wkv_state.shape) # eg. [1, 2560, 3]
 
-        #% RWKV-5x token shift experiment %#
         xxx = torch.concat((last_state.shift_state, x), dim=1)
         xx = self.time_shift(xxx)
-        # # Mix x with the previous timestep to produce xk, xv, xr
-        # xx = torch.concat((last_state.shift_state.unsqueeze(1), x[:, :-1]),
-        #                   dim=1)
 
         xk = x * self.time_mix_k + xx * (1 - self.time_mix_k)
         xv = x * self.time_mix_v + xx * (1 - self.time_mix_v)
@@ -277,9 +257,7 @@ class RWKV_TimeMix(JITModClass):
 
         sr = torch.sigmoid(r)
 
-        #% RWKV-5x token shift experiment %#
         return k, v, sr, xxx
-        # return k, v, sr
 
     @JITModMethod
     @TCompileMax
@@ -289,16 +267,11 @@ class RWKV_TimeMix(JITModClass):
     @JITModMethod
     @TCompileBaseline
     def forward(self, x, last_state: TimeMixState):
-        #% RWKV-5x token shift experiment %#
         k, v, sr, xxx = self._forward_kvsr(x, last_state)
-        # k, v, sr = self._forward_kvsr(x, last_state)
-
         y, new_wkv_state = wkv_op(self.time_decay, self.time_first,
                                   k, v, last_state.wkv_state)
         
-        #% RWKV-5x token shift experiment %#
         return self._forward_out(sr, y, xxx, new_wkv_state)
-        # return self._forward_out(sr, y, x[:, -1], new_wkv_state)
 
 
 ########################################################################################################
@@ -744,11 +717,8 @@ class RWKV(L.LightningModule):
         return -1
 
     @TCompileBaseline
-    #% RWKV-5x token shift experiment %#
     def forward(self, idx: torch.Tensor, last_att_shift_states: torch.Tensor, last_ffn_shift_states: torch.Tensor,
                 last_wkv_states: torch.Tensor):
-    # def forward(self, idx: torch.Tensor, last_shift_states: torch.Tensor,
-    #             last_wkv_states: torch.Tensor):
         B, T = idx.size()
         assert T <= self.ctx_len, "Cannot forward, model ctx_len is exhausted."
 
@@ -764,9 +734,7 @@ class RWKV(L.LightningModule):
         #             BlockStateList(last_shift_states, last_wkv_states))):
         # ---
 
-        #% RWKV-5x token shift experiment %#
         bs_list = BlockStateList(last_att_shift_states,last_ffn_shift_states, last_wkv_states)
-        # bs_list = BlockStateList(last_shift_states, last_wkv_states)
         for i in range(len(self.blocks)):
             block = self.blocks[i]
             last_state = bs_list[i]
@@ -781,9 +749,7 @@ class RWKV(L.LightningModule):
 
         x = self.head(x)
 
-        #% RWKV-5x token shift experiment %#
         return x, new_states.att_shift_states, new_states.ffn_shift_states, new_states.wkv_states
-        # return x, new_states.shift_states, new_states.wkv_states
 
     #
     # Custom overwrite of manual_backwards operation, to skip the "manual_backwards"
@@ -877,15 +843,10 @@ class RWKV(L.LightningModule):
         if total_mask_sum == 0:
             return 0
         
-        #% RWKV-5x token shift experiment %#
         def checkpointed_step(idx, targets, mask, prev_loss, last_att_shift_states, last_ffn_shift_states,
                               last_wkv_states, prev_steps):
             logits, new_att_shift_states, new_ffn_shift_states, new_wkv_states = self(
                 idx, last_att_shift_states, last_ffn_shift_states, last_wkv_states)
-        # def checkpointed_step(idx, targets, mask, prev_loss, last_shift_states,
-        #                       last_wkv_states, prev_steps):
-        #     logits, new_shift_states, new_wkv_states = self(
-        #         idx, last_shift_states, last_wkv_states)
             
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)),
                                     targets.view(-1),
@@ -899,9 +860,7 @@ class RWKV(L.LightningModule):
             new_steps = prev_steps + submask_sum
             new_loss = prev_loss + loss
             
-            #% RWKV-5x token shift experiment %#
             return new_loss, new_att_shift_states, new_ffn_shift_states, new_wkv_states, new_steps
-            # return new_loss, new_shift_states, new_wkv_states, new_steps
 
         total_loss = torch.tensor(
             0, dtype=self.emb.weight.dtype).requires_grad_()
@@ -987,16 +946,12 @@ class RWKV(L.LightningModule):
                 # this limits the backprop process, reduces loss learning rate, 
                 # but save vram across extreamly large backpropagation steps
                 if self.bptt_truncated_learning:
-                    #% RWKV-5x token shift experiment %#
                     prv_att_shift_states = states.att_shift_states.clone().detach().requires_grad_(False)
                     prv_ffn_shift_states = states.ffn_shift_states.clone().detach().requires_grad_(False)
-                    # prv_shift_states = states.shift_states.clone().detach().requires_grad_(False)
                     prv_wkv_states = states.wkv_states.clone().detach().requires_grad_(False)
                 else:
-                    #% RWKV-5x token shift experiment %#
                     prv_att_shift_states = states.att_shift_states
                     prv_ffn_shift_states = states.ffn_shift_states
-                    # prv_shift_states = states.shift_states
                     prv_wkv_states = states.wkv_states
                 
                 # We use a dummy masked token 0, to do additional dummy checkpoint/forward/backprop when needed
@@ -1011,23 +966,17 @@ class RWKV(L.LightningModule):
                     cur_msk = dummy_2d_zero
 
                 # Segmented learning, applies the forward/pass over each chunk seperately
-                #% RWKV-5x token shift experiment %#
                 segment_loss, new_att_shift_states, new_ffn_shift_states, new_wkv_states, steps = checkpointed_step(
-                # segment_loss, new_shift_states, new_wkv_states, steps = checkpointed_step(
                     cur_idx,
                     cur_tar,
                     cur_msk,
                     torch.tensor(0, dtype=self.emb.weight.dtype, device=cur_device).requires_grad_(True),
-                    #% RWKV-5x token shift experiment %#
                     prv_att_shift_states,
                     prv_ffn_shift_states,
-                    # prv_shift_states,
                     prv_wkv_states,
                     steps,
                 )
-                #% RWKV-5x token shift experiment %#
                 states = BlockStateList(new_att_shift_states, new_ffn_shift_states, new_wkv_states)
-                # states = BlockStateList(new_shift_states, new_wkv_states)
                 
                 # Compute the backward pass for the segment
                 if i >= first_learning_segment:
@@ -1061,39 +1010,30 @@ class RWKV(L.LightningModule):
             segment_size = self.ctx_len
             for i in range(segment_count):
                 if i < segment_count-1:
-                    #% RWKV-5x token shift experiment %#
                     total_loss, new_att_shift_states, new_ffn_shift_states, new_wkv_states, steps = deepspeed_checkpoint(
-                    # total_loss, new_shift_states, new_wkv_states, steps = deepspeed_checkpoint(
                         checkpointed_step,
                         idx[:, i * segment_size:(i + 1) * segment_size],
                         targets[:, i * segment_size:(i + 1) * segment_size],
                         seq_mask[:, i * segment_size:(i + 1) * segment_size],
                         total_loss,
-                        #% RWKV-5x token shift experiment %#
                         states.shift_states.att_shift_states,
                         states.shift_states.ffn_shift_states,
-                        # states.shift_states,
                         states.wkv_states,
                         steps,
                     )
                 else:
-                    #% RWKV-5x token shift experiment %#
                     total_loss, new_att_shift_states, new_ffn_shift_states, new_wkv_states, steps = checkpointed_step(
-                    # total_loss, new_shift_states, new_wkv_states, steps = checkpointed_step(
                         idx[:, i * segment_size:(i + 1) * segment_size],
                         targets[:, i * segment_size:(i + 1) * segment_size],
                         seq_mask[:, i * segment_size:(i + 1) * segment_size],
                         total_loss,
-                        #% RWKV-5x token shift experiment %#
                         states.shift_states.att_shift_states,
                         states.shift_states.ffn_shift_states,
-                        # states.shift_states,
                         states.wkv_states,
                         steps,
                     )
 
                 states = BlockStateList(new_att_shift_states, new_ffn_shift_states, new_wkv_states)
-                # states = BlockStateList(new_shift_states, new_wkv_states)
                 gc.collect()
                 # torch.cuda.empty_cache()
 
