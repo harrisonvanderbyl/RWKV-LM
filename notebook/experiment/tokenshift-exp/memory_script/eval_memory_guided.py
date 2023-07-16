@@ -92,6 +92,7 @@ def validate_model(token_count):
     # Line break for verbose mode
     if verbose:
         print("## ------------------ ")
+        print(f'## Model validation for {token_count} tokens')
 
     # Lets evaluate the logits, and check if they match one by one
     for i in range(len(target_tokens)):
