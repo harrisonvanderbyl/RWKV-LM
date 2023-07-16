@@ -229,7 +229,7 @@ class RWKV_RNN(MyModule):
                 state = [torch.zeros(args.n_layer * 5, args.n_embd, device=self.RUN_DEVICE),
                          
                         torch.rand(args.n_layer, 1, args.n_embd, device=self.RUN_DEVICE),
-                        [torch.zeros(2**i,args.n_embd, device=self.RUN_DEVICE) for i in range(args.n_layer)]
+                        [torch.rand(2**i,args.n_embd, device=self.RUN_DEVICE) for i in range(args.n_layer)]
                         
                         ,]
                 for i in range(args.n_layer):
