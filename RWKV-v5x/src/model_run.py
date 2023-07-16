@@ -19,9 +19,9 @@ MyFunction = __nop
 # MyFunction = torchdynamo.optimize(os.environ["RWKV_RUN_BACKEND"]) # !!!BUGGY!!! wrong output
 
 # try torch jit --> faster for fp32, slower for fp16 (why?)
-if os.environ["RWKV_JIT_ON"] == "1":
-    MyModule = torch.jit.ScriptModule
-    MyFunction = torch.jit.script_method
+# if os.environ["RWKV_JIT_ON"] == "1":
+#     MyModule = torch.jit.ScriptModule
+#     MyFunction = torch.jit.script_method
 
 RWKV_HEAD_QK_DIM = 0
 print(f'\nRWKV_HEAD_QK_DIM {RWKV_HEAD_QK_DIM} RWKV_JIT_ON {os.environ["RWKV_JIT_ON"]}\n')
@@ -124,22 +124,24 @@ class RWKV_RNN(MyModule):
     @MyFunction
     def FF(self, x, state:List[torch.Tensor], i:int, time_mix_k, time_mix_r, kw, vw, rw):
         
-        indexxx = pow(2,i)
-        # indexxx = pow(2,layers - (layer_id+1))
-        indexx = -2
+        # indexxx = pow(2,i)
+        # # indexxx = pow(2,layers - (layer_id+1))
+        indexx = 0
+        # indexxx = pow(2,i)
+        # indexx = int(-indexxx) - 1
 
         if self.FLOAT_MODE == "bf16":
             xk = x * time_mix_k + state[1][i][indexx].type(torch.bfloat16) * (1 - time_mix_k)
             xr = x * time_mix_r + state[1][i][indexx].type(torch.bfloat16) * (1 - time_mix_r)
-            state[1][i][-1] = x.float()
+            state[1][i][0] = x.float()
         elif self.FLOAT_MODE == "fp16":
             xk = x * time_mix_k + state[1][i][indexx].half() * (1 - time_mix_k)
             xr = x * time_mix_r + state[1][i][indexx].half() * (1 - time_mix_r)
-            state[1][i][-1] = x.float()           
+            state[1][i][0] = x.float()           
         else:
             xk = x * time_mix_k + state[1][i][indexx] * (1 - time_mix_k)
             xr = x * time_mix_r + state[1][i][indexx] * (1 - time_mix_r)
-            state[1][i][-1] = x.float()
+            state[1][i][0] = x.float()
 
         r = torch.sigmoid(rw @ xr)
         k = torch.square(torch.relu(kw @ xk))
@@ -152,27 +154,28 @@ class RWKV_RNN(MyModule):
         
         
         # print(f'layer_id {layer_id} layers {layers}')
-        # indexxx = pow(2,layer_id)
-        indexxx = pow(2,i)
-        indexx = int(-indexxx) - 1
+        
+        indexx = 0
+        
 
         if self.FLOAT_MODE == "bf16":
             xk = x * time_mix_k + state[2][i][indexx].type(torch.bfloat16) * (1 - time_mix_k)
             xv = x * time_mix_v + state[2][i][indexx].type(torch.bfloat16) * (1 - time_mix_v)
             xr = x * time_mix_r + state[2][i][indexx].type(torch.bfloat16) * (1 - time_mix_r)
             
-            state[2][i][-1] = x.float()
+            state[2][i][indexx] = x.float()
         elif self.FLOAT_MODE == "fp16":
             xk = x * time_mix_k + state[2][i][indexx].half() * (1 - time_mix_k)
             xv = x * time_mix_v + state[2][i][indexx].half() * (1 - time_mix_v)
             xr = x * time_mix_r + state[2][i][indexx].half() * (1 - time_mix_r)
-            state[2][i][-1] = x.float()         
+            state[2][i][indexx] = x.float()         
         else:
             xk = x * time_mix_k + state[2][i][indexx] * (1 - time_mix_k)
             xv = x * time_mix_v + state[2][i][indexx] * (1 - time_mix_v)
             xr = x * time_mix_r + state[2][i][indexx] * (1 - time_mix_r)
-            state[2][i][-1] = x.float()
+            state[2][i][indexx] = x.float()
 
+        state[2][i] = state[2][i].roll(-1*x.shape[0])
         r = torch.sigmoid(rw @ xr)
         k = kw @ xk
         v = vw @ xv
@@ -224,14 +227,16 @@ class RWKV_RNN(MyModule):
 
             if state == None:
                 state = [torch.zeros(args.n_layer * 5, args.n_embd, device=self.RUN_DEVICE),
-                         torch.zeros(args.n_layer, pow(2,args.n_layer), args.n_embd, device=self.RUN_DEVICE),
-                            torch.zeros(args.n_layer, pow(2,args.n_layer), args.n_embd, device=self.RUN_DEVICE),]
+                         
+                        torch.rand(args.n_layer, 1, args.n_embd, device=self.RUN_DEVICE),
+                        [torch.zeros(2**i,args.n_embd, device=self.RUN_DEVICE) for i in range(args.n_layer)]
+                        
+                        ,]
                 for i in range(args.n_layer):
                     state[0][5*i+4] -= 1e30
             
             for i in range(args.n_layer):
-                state[1][i] = state[1][i].roll(-1, dims=0)
-                state[2][i] = state[2][i].roll(-1, dims=0)
+                
                 if i == 0:
                     x = self.LN(x, w.blocks[i].ln0)
                 
@@ -245,6 +250,8 @@ class RWKV_RNN(MyModule):
                     ww.time_mix_k, ww.time_mix_r, 
                     ww.key.weight, ww.value.weight, ww.receptance.weight)
                 
+                # state[1][i] = state[1][i].roll(-1, dims=0)
+                # state[2][i] = state[2][i].roll(-1, dims=0)
                 # if (i+1) % RWKV_RESCALE_LAYER == 0:
                 #     x = x / 2
 

@@ -198,9 +198,21 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
         x = ctx[: i + 1]
         x = x[-ctx_len:]
 
+        def recursiveClone(x):
+            if isinstance(x, torch.Tensor):
+                return x.clone()
+            elif isinstance(x, list):
+                return [recursiveClone(xx) for xx in x]
+            elif isinstance(x, tuple):
+                return tuple([recursiveClone(xx) for xx in x])
+            elif isinstance(x, dict):
+                return {k: recursiveClone(v) for k, v in x.items()}
+            else:
+                return x
+
         if i == src_len:
             out = init_out.clone()
-            state = [s.clone() for s in init_state]
+            state = recursiveClone(init_state)
         else:
             out, state = model.forward(x, state)
         if DEBUG_DEBUG:
