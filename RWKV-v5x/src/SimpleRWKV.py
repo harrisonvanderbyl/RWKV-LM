@@ -23,7 +23,7 @@ class SimpleRWKV:
     def __init__(
             self,
             model_path: str,
-            device:str = "cpu",
+            device:str = "cuda",
             dtype:str = "fp32",
             tokenizer = "pile",
         ):
