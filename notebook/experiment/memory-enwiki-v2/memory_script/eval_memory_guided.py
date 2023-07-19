@@ -66,7 +66,7 @@ markdown_token = pipeline.encode("```")[0]
 newline_token = pipeline.encode("\n")[0]
 
 # Pipeline args to use
-token_ban = [on_token] # ban the generation of some tokens
+token_ban = [] # [on_token] # ban the generation of some tokens
 pipeline_args = PIPELINE_ARGS(
                      temperature = 0.2, top_p = 0.2, 
                      top_k = 1, # top_k = 0 then ignore
