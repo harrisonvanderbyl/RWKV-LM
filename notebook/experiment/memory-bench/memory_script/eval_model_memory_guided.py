@@ -49,7 +49,7 @@ markdown_token = model.encode("```")[0]
 newline_token = model.encode("\n")[0]
 
 # Pipeline args to use
-token_ban = [on_token] # ban the generation of some tokens
+token_ban = [] #[on_token] # ban the generation of some tokens
 
 # Read the test word list, taken from ./eval_word_list.txt
 with open(os.path.join(SCRIPT_DIR,'./eval_word_list.txt'), 'r') as f:

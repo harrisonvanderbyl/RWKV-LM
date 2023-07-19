@@ -775,7 +775,7 @@ class RWKV(L.LightningModule):
         new_states = BlockStateList.empty(self.n_layer, B, self.n_embd,
                                           x.device, x.dtype)
         
-        if last_shift_states is None:
+        if last_att_shift_states is None:
             cur_bs_list = BlockStateList.empty(
                 self.n_layer, B,
                 self.n_embd,
@@ -1234,10 +1234,12 @@ class SimpleRWKV():
 
         # Get the shift/wkv state
         if stateObj is None:
-            shift_states = None
+            att_shift_states = None
+            ffn_shift_states = None
             wkv_states = None
         else:
-            shift_states = stateObj["shift_states"]
+            att_shift_states = stateObj["att_shift_states"]
+            ffn_shift_states = stateObj["ffn_shift_states"]
             wkv_states = stateObj["wkv_states"]
         
         # For each token, process the state, in batches up to ctx_len
@@ -1250,12 +1252,12 @@ class SimpleRWKV():
             )
 
             # Compute the logits and state
-            logits_arr, shift_states, wkv_states = self.model.forward(
-                batch_tokens, shift_states, wkv_states
+            logits_arr, att_shift_states, ffn_shift_states, wkv_states = self.model.forward(
+                batch_tokens, att_shift_states, ffn_shift_states, wkv_states
             )
 
         # Return the logits and state
-        return logits_arr[0][-1], { "shift_states": shift_states, "wkv_states": wkv_states }
+        return logits_arr[0][-1], { "att_shift_states": att_shift_states, "ffn_shift_states": ffn_shift_states, "wkv_states": wkv_states }
     
     # Forwarding logic, with torch._no_grad() context
     def forward(
