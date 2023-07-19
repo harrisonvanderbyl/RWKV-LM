@@ -38,9 +38,9 @@ from rwkv.utils import PIPELINE_ARGS
 
 # Model strategy to use
 # model_run_strat='cpu fp32' # CPU only, use if you dun have a GPU
-model_run_strat='cuda fp32' # Entire model is in the GPU (use if you have enough vram)
+# model_run_strat='cuda fp32' # Entire model is in the GPU (use if you have enough vram)
 # model_run_strat='cuda fp32 *11+' # GPU streaming, if you have vram issues for 14B model
-# model_run_strat='cuda fp16 *0+' # GPU streaming, if you have really low vram
+model_run_strat='cuda fp32 *6+' # GPU streaming, if you have really low vram
 
 # Dir of this script
 script_dir = os.path.dirname(os.path.realpath(__file__))
@@ -66,7 +66,7 @@ markdown_token = pipeline.encode("```")[0]
 newline_token = pipeline.encode("\n")[0]
 
 # Pipeline args to use
-token_ban = [] # [on_token] # ban the generation of some tokens
+token_ban = [on_token] # ban the generation of some tokens
 pipeline_args = PIPELINE_ARGS(
                      temperature = 0.2, top_p = 0.2, 
                      top_k = 1, # top_k = 0 then ignore
@@ -82,6 +82,12 @@ with open(os.path.join(script_dir,'./eval_word_list.txt'), 'r') as f:
 
 # Open the CSV file, to write into
 if csv_file_path != None:
+    # Ensure parent dir is in place
+    csv_file_dir = os.path.dirname(csv_file_path)
+    if not os.path.exists(csv_file_dir):
+        os.makedirs(csv_file_dir)
+
+    # Open the CSV file
     import csv
     csv_file_handle = open(csv_file_path, 'w', newline='')
     csv_writer = csv.writer(csv_file_handle)
@@ -245,8 +251,8 @@ for i in range(150, 300, 10):
 for i in range(300, 700, 25):
     validate_model(i)
 
-# We validate in increments of 50 from 700 to 1000
-for i in range(700, MAX_TOKENS, 50):
+# We validate in increments of 50 from 700 to MAXTOKEN (inclusive)
+for i in range(700, MAX_TOKENS+1, 50):
     validate_model(i)
 
 # Lets do the baseline
