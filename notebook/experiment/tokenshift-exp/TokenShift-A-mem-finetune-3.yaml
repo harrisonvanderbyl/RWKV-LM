@@ -328,7 +328,7 @@ data:
   # ---
   # multi_column_keys: ['input_prefix', 'input', 'output_prefix', 'output', 'closing']
   # multi_column_prefix: ['', '', '', '', '']
-  # multi_column_masking: [false, true, false, false, false]
+  # multi_column_train_mask: [false, true, false, false, false]
   # multi_column_separator: ''
 
   # If processing prompt/completion jsonl pairs, the prompt is masked by default
