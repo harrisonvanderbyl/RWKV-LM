@@ -50,7 +50,7 @@ class TOKENIZER():
         # out[self.UNKNOWN_CHAR] = -float('Inf')
         lastChar = int(x[-1])
 
-        probs = F.softmax(out, dim=-1)
+        probs = F.softmax(out, dim=-1).float()
 
         if self.charMode:
             if self.itos[lastChar] == '\n':
