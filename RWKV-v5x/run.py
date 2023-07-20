@@ -194,7 +194,7 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
     out_last = src_len
     for i in range(src_len, src_len + (1 if DEBUG_DEBUG else LENGTH_PER_TRIAL)):
         x = ctx[: i + 1]
-        x = x[-ctx_len:]
+        x = x[-1:]
 
         def recursiveClone(x):
             if isinstance(x, torch.Tensor):

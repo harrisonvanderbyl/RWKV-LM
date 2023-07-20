@@ -65,11 +65,11 @@ def wkv_mop(time_decay, time_first, k, v, wkv_state):
     # print k hasnan
     kk = torch.exp(k.double())
     vv = v.double()
-    wr1 = wkv_state[0] +  torch.exp(u+w+k.double()) * vv
-    wr2 = wkv_state[1]  +  torch.exp(u+w+k.double())
+    wr1 = wkv_state[0] +  torch.exp(u+k.double()) * vv
+    wr2 = wkv_state[1]  +  torch.exp(u+k.double())
     y = wr1 / wr2
-    wkv_state[0] = (wkv_state[0] + kk*vv) * torch.exp(w)
-    wkv_state[1] = (wkv_state[1]  + kk) * torch.exp(w)
+    wkv_state[0] = (wkv_state[0]* torch.exp(w) + kk*vv) 
+    wkv_state[1] = (wkv_state[1]* torch.exp(w)  + kk) 
     return y.to(k.dtype), wkv_state
 
 ########################################################################################################
@@ -121,7 +121,7 @@ class BlockStateList:
                                  dtype=torch.float)
         
         # HOT FIX 2**12, 12 should = layer count
-        att_shift_states = [[] for _ in range(N)]
+        att_shift_states = [torch.zeros((2**_ if 2**_ <= 2048 else 1, C), device=device, dtype=dtype) for _ in range(N)]
         ffn_shift_states = torch.zeros((N, 1, C), device=device, dtype=dtype)
         return BlockStateList(att_shift_states, ffn_shift_states, wkv_states)
 
@@ -158,6 +158,8 @@ class RWKV_TimeMix(JITModClass):
         # self.output = nn.Linear(dim_att, n_embd, bias=False)
 
         self.shiftamount = pow(2,layer_id)
+        if self.shiftamount > 2048:
+            self.shiftamount = 1
         # self.time_shift = nn.ZeroPad2d((0, 0, shiftamount, -shiftamount))
         self.time_mix_k = load_model[f"blocks.{layer_id}.att.time_mix_k"].squeeze().to(dtype=float_mode, device=device)
         self.time_mix_v = load_model[f"blocks.{layer_id}.att.time_mix_v"].squeeze().to(dtype=float_mode, device=device)
@@ -180,12 +182,12 @@ class RWKV_TimeMix(JITModClass):
         # print("last_state.shift_state: ", last_state.shift_state.shape) # eg. [4096, 1, 2560]
         # print("last_state.shift_state.unsqueeze(0): ", last_state.shift_state.unsqueeze(0).shape) # eg. [1, 1, 2560]
         
-        xxx = last_state.shift_state + [x]
+        xxx = last_state.shift_state
         
-        if(len(xxx) < self.shiftamount+1):
-            xx = self.zz
-        else:
-            xx = xxx[-self.shiftamount-1]
+        xx = xxx[-1]
+        
+        xxx = xxx.roll(1, dims=0)
+        xxx[0] = x
 
         # print("xx[0]", xx[0])
         # print("x[0]", x[0])
