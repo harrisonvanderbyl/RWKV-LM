@@ -245,6 +245,8 @@ class RWKV_TimeMix(JITModClass):
         self.output = nn.Linear(dim_att, n_embd, bias=False)
 
         shiftamount = pow(2,layer_id)
+        if(shiftamount > 2048):
+            shiftamount = 1
         self.time_shift = nn.ZeroPad2d((0, 0, shiftamount, -shiftamount))
 
     @JITModMethod
