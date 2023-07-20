@@ -146,7 +146,7 @@ class BlockStateList:
 
 class RWKV_TimeMix(JITModClass):
 
-    def __init__(self, layer_id, n_layer, n_embd, dim_att, load_model, float_mode, device):
+    def __init__(self, layer_id, n_layer, n_embd, load_model, float_mode, device):
         super().__init__()
 
 
@@ -242,7 +242,7 @@ class RWKV_TimeMix(JITModClass):
 
 class RWKV_ChannelMix(JITModClass):
 
-    def __init__(self, layer_id, n_layer, n_embd, dim_ffn, load_model, float_mode, device):
+    def __init__(self, layer_id, n_layer, n_embd, load_model, float_mode, device):
         super().__init__()
 
 
@@ -278,7 +278,7 @@ class RWKV_ChannelMix(JITModClass):
 
 class Block(nn.Module):
 
-    def __init__(self, layer_id, n_layer, n_embd, dim_att, dim_ffn, load_model, float_mode, device):
+    def __init__(self, layer_id, n_layer, n_embd, load_model, float_mode, device):
         super().__init__()
         self.layer_id = layer_id
 
@@ -287,8 +287,8 @@ class Block(nn.Module):
             self.ln0weight = (load_model[f"blocks.{layer_id}.ln0.weight"]).to(dtype=float_mode, device=device)
             self.ln0bias = (load_model[f"blocks.{layer_id}.ln0.bias"]).to(dtype=float_mode, device=device)
 
-        self.att = RWKV_TimeMix(layer_id, n_layer, n_embd, dim_att,load_model, float_mode, device)
-        self.ffn = RWKV_ChannelMix(layer_id, n_layer, n_embd, dim_ffn,load_model, float_mode, device)
+        self.att = RWKV_TimeMix(layer_id, n_layer, n_embd,load_model, float_mode, device)
+        self.ffn = RWKV_ChannelMix(layer_id, n_layer, n_embd,load_model, float_mode, device)
 
         self.ln1weight = (load_model[f"blocks.{layer_id}.ln1.weight"]).to(dtype=float_mode, device=device)
         self.ln1bias = (load_model[f"blocks.{layer_id}.ln1.bias"]).to(dtype=float_mode, device=device)
@@ -356,38 +356,6 @@ class RWKV(nn.Module):
                  vocab_size: int,
                  # Model file path to load from
                  load_model,
-                 # Context length schedule
-                 ctx_len_cutoffs: List[int] = [],
-                 ctx_len_warmup_steps: List[int] = [],
-                 # Alternative to lr_init / lr_final
-                 # that is multiplied by the gradient_accumulation_steps
-                 # to get the actual learning rate
-                 target_lr_init: float = -1.0,
-                 target_lr_final: float = -1.0,
-                 # Learning rate schedule
-                 # use only target_lr_init / lr_init
-                 # to configure a constant learning rate
-                 lr_init: float = -1.0,
-                 lr_final: float = -1.0,
-                 lr_period: int = -1,
-                 lr_period_type: str = 'epoch',
-                 # Adam optimizer settings
-                 beta1: float = 0.9,
-                 beta2: float = 0.99,
-                 adam_eps: float = 1.0e-08,
-                 weight_decay: float = 0.01,
-                 warmup_steps: int = -1,
-                 # Backprop settings
-                 grad_cp: bool = True,
-                 bptt_learning: bool = True,
-                 bptt_learning_range: int = -1,
-                 bptt_truncated_learning: bool = False,
-                 layerwise_lr: bool = True,
-                 dim_att: Optional[int] = None,
-                 dim_ffn: Optional[int] = None,
-                 substep_cuda_cache_clear: bool = False,
-                 substep_logging: bool = False,
-                 torch_set_float32_matmul_precision:str = 'high'
                  ):
 
         # Lets save everything in one shot
@@ -401,41 +369,16 @@ class RWKV(nn.Module):
 
         # Save the various other params for later
         self.ctx_len = ctx_len
-        self.ctx_len_cutoffs = ctx_len_cutoffs
-        self.ctx_len_warmup_steps = ctx_len_warmup_steps
         self.n_embd = n_embd
         self.n_layer = n_layer
-        self.layerwise_lr = layerwise_lr
-        self.grad_cp = grad_cp
-        self.target_lr_init = target_lr_init
-        self.target_lr_final = target_lr_final
-        self.lr_init = lr_init
-        self.lr_final = lr_final
-        self.lr_period = lr_period
-        self.lr_period_type = lr_period_type
-        self.warmup_steps = warmup_steps
-        self.beta1 = beta1
-        self.beta2 = beta2
-        self.weight_decay = weight_decay
-        self.adam_eps = adam_eps
-        self.bptt_learning = bptt_learning
-        self.bptt_learning_range = bptt_learning_range
-        self.bptt_truncated_learning = bptt_truncated_learning
-        self.substep_cuda_cache_clear = substep_cuda_cache_clear
-        self.substep_logging = substep_logging
 
-        dim_att = dim_att or n_embd
-        dim_ffn = dim_ffn or n_embd * 4
-
-        if torch_set_float32_matmul_precision is not None:
-            torch.set_float32_matmul_precision(torch_set_float32_matmul_precision)
-
+   
 
         self.float_mode = torch.bfloat16
         self.device = torch.device("cuda")
 
         self.blocks = nn.ModuleList([
-            Block(i, n_layer, n_embd, dim_att, dim_ffn, load_model, self.float_mode, self.device) for i in range(n_layer)
+            Block(i, n_layer, n_embd, load_model, self.float_mode, self.device) for i in range(n_layer)
         ])
 
 
@@ -556,7 +499,6 @@ class SimpleRWKV():
         model_config["ctx_len"] = ctx_len
 
         # This feature depends on deepspeed
-        model_config["grad_cp"] = False
         # model_config["_torch_load_state"] = loaded_state
 
         # Save the config settings

@@ -244,6 +244,8 @@ class RWKV_TimeMix(JITModClass):
         self.receptance = nn.Linear(n_embd, dim_att, bias=False)
         self.output = nn.Linear(dim_att, n_embd, bias=False)
 
+        # shiftamount = 1 (Old version)
+
         shiftamount = pow(2,layer_id)
         if(shiftamount > 2048):
             shiftamount = 1
@@ -277,6 +279,7 @@ class RWKV_TimeMix(JITModClass):
         xk = x * self.time_mix_k + xx * (1 - self.time_mix_k)
         xv = x * self.time_mix_v + xx * (1 - self.time_mix_v)
         xr = x * self.time_mix_r + xx * (1 - self.time_mix_r)
+        
 
         k = self.key(xk)
         v = self.value(xv)
