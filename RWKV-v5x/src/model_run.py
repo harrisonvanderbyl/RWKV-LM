@@ -65,13 +65,11 @@ def wkv_mop(time_decay, time_first, k, v, wkv_state):
     # print k hasnan
     kk = torch.exp(k.double())
     vv = v.double()
-    wr1 = wkv_state[0] +  torch.exp(u+w+k) * vv
-    wr2 = wkv_state[1]  +  torch.exp(u+w+k)
-    # print("wr1[0]", wkv_state[0][0])
-    # print("wr2[0]", wkv_state[1][0])
+    wr1 = wkv_state[0] +  torch.exp(u+w+k.double()) * vv
+    wr2 = wkv_state[1]  +  torch.exp(u+w+k.double())
     y = wr1 / wr2
-    wkv_state[0] = ((wkv_state[0] + kk*vv) * torch.exp(w)).float()
-    wkv_state[1] = ((wkv_state[1]  + kk) * torch.exp(w)).float()
+    wkv_state[0] = (wkv_state[0] + kk*vv) * torch.exp(w)
+    wkv_state[1] = (wkv_state[1]  + kk) * torch.exp(w)
     return y.to(k.dtype), wkv_state
 
 ########################################################################################################
@@ -182,12 +180,12 @@ class RWKV_TimeMix(JITModClass):
         # print("last_state.shift_state: ", last_state.shift_state.shape) # eg. [4096, 1, 2560]
         # print("last_state.shift_state.unsqueeze(0): ", last_state.shift_state.unsqueeze(0).shape) # eg. [1, 1, 2560]
         
-        xxx = last_state.shift_state + [x.clone()]
+        xxx = last_state.shift_state + [x]
         
-        if(len(xxx) < self.shiftamount):
+        if(len(xxx) < self.shiftamount+1):
             xx = self.zz
         else:
-            xx = xxx[-self.shiftamount]
+            xx = xxx[-self.shiftamount-1]
 
         # print("xx[0]", xx[0])
         # print("x[0]", x[0])
