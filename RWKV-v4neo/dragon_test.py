@@ -10,7 +10,7 @@ import os
 # Check for argument, else throw error
 if len(sys.argv) < 2:
     print("No arguments supplied")
-    print("Usage: python3 dragon_test.py <model-path> [device]")
+    print("Usage: python3 dragon_test.py <model-path> [device] [max-tokens]")
     sys.exit(1)
 
 # download models: https://huggingface.co/BlinkDL
@@ -29,6 +29,11 @@ if DEVICE.find('cuda') != -1:
 else:
     DEVICE = 'cpu'
 
+# Get the output size
+MAX_TOKENS=200
+if len(sys.argv) >= 4:
+    MAX_TOKENS=int(sys.argv[3])
+
 # Setup the model
 from src.model import SimpleRWKV
 model = SimpleRWKV(MODEL_PATH, device=DEVICE)
@@ -36,4 +41,4 @@ model = SimpleRWKV(MODEL_PATH, device=DEVICE)
 # And perform the dragon prompt
 prompt = "\nIn a shocking finding, scientist discovered a herd of dragons living in a remote, previously unexplored valley, in Tibet. Even more surprising to the researchers was the fact that the dragons spoke perfect Chinese."
 print(f"--- DRAGON PROMPT ---{prompt}", end='')
-model.completion(prompt, stream_to_stdout=True, max_tokens=200, temperature=1.0, top_p=0.7)
+model.completion(prompt, stream_to_stdout=True, max_tokens=MAX_TOKENS, temperature=1.0, top_p=0.7)
