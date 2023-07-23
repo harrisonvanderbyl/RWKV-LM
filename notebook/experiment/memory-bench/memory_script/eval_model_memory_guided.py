@@ -130,6 +130,9 @@ def validate_model(token_count, withoutInstructAndInput=False):
         print("## ------------------ ")
         print(f'## Model validation for {token_count} tokens')
 
+    # CSV rows (to write)
+    csv_rows_to_write = []
+
     # Lets evaluate the logits, and check if they match one by one
     for i in range(len(target_tokens)):
         # Get the target token
@@ -176,17 +179,23 @@ def validate_model(token_count, withoutInstructAndInput=False):
                 # We need to encode the strings safely (escape special characters, new lines, etc)
                 top_token_str = top_token_str.encode('unicode_escape').decode('utf-8')
                 target_token_str = target_token_str.encode('unicode_escape').decode('utf-8')
-                csv_writer.writerow([
+
+                # Add the row to the list
+                csv_rows_to_write.append([
                     token_count, i, top_token == target,
                     top_token_str, top_prob,
                     target_token_str, target_pos, target_prob,
                     withoutInstructAndInput == True
                 ])
             
-        
         # Forward with the target token
         logits, state = model.forward([target], state)
     
+    # Write the CSV rows (if enabled)
+    if csv_writer != None:
+        csv_writer.writerows(csv_rows_to_write)
+        csv_file_handle.flush()
+
     # Percentage token match
     matched_percentage = matched_tokens / token_count * 100.0
 
