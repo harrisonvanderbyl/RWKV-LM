@@ -175,7 +175,7 @@ trainer:
 ########################################
 model:
   # Model to start the finetune/training process from
-  load_model: ../model/TokenShift-C-Tune3.pth
+  load_model: ../model/TokenShift-C-Tune4.pth
 
   # The model size setting, this MUST match
   # your current model settings, refer to the model card
@@ -193,7 +193,7 @@ model:
   # This allows the training of extreamly large context length (eg. 100k),
   # without eating up too much vram by keeping the training context length
   # to a resonable number sutible to the current GPU setup
-  ctx_len: 4096
+  ctx_len: 1024
   
   # Learning rate of the training process
   # ---
@@ -296,7 +296,7 @@ data:
   #
   # This is ignored, if set to -1
   min_token_size: -1
-  max_token_size: 4096
+  max_token_size: 8192
 
   # Rechunking of text dataset, this is done only when source is set as 'text'
   # and will merge the various sentencees, into larger chunks up to the target size
