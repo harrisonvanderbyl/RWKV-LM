@@ -129,9 +129,9 @@ DEBUG_DEBUG = False  # True False --> show softmax output
 ########################################################################################################
 
 print(f'\nUsing {args.RUN_DEVICE.upper()}. Loading {MODEL_NAME}...')
-from src.model_run import RWKV_RNN
+from src.model_run import SimpleRWKV
 
-model = RWKV_RNN(args)
+model = SimpleRWKV(args.MODEL_NAME+'.pth', 1, args.RUN_DEVICE, args.FLOAT_MODE)
 
 print(f'\nOptimizing speed...')
 out, _ = model.forward([187], None)
@@ -185,10 +185,8 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
     if TRIAL == 0:
         for i in range(src_len):
             x = ctx[: i + 1]
-            if i == src_len - 1:
-                init_out, init_state = model.forward(x, init_state)
-            else:
-                init_state = model.forward(x, init_state, preprocess_only=True)
+            init_out, init_state = model.forward(x, init_state)
+           
         gc.collect()
         torch.cuda.empty_cache()
 
@@ -196,7 +194,7 @@ for TRIAL in range(1 if DEBUG_DEBUG else NUM_TRIALS):
     out_last = src_len
     for i in range(src_len, src_len + (1 if DEBUG_DEBUG else LENGTH_PER_TRIAL)):
         x = ctx[: i + 1]
-        x = x[-ctx_len:]
+        x = x[-1:]
 
         def recursiveClone(x):
             if isinstance(x, torch.Tensor):
