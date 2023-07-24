@@ -83,7 +83,7 @@ trainer:
       filename: null
       
       # Save the top/last K checkpoints
-      save_top_k: 3
+      save_top_k: 2
       # Choose by the most recent checkpoints (time based)
       monitor: 'step'
       mode: max
@@ -193,7 +193,7 @@ model:
   # This allows the training of extreamly large context length (eg. 100k),
   # without eating up too much vram by keeping the training context length
   # to a resonable number sutible to the current GPU setup
-  ctx_len: 8192
+  ctx_len: 4096
   
   # Learning rate of the training process
   # ---
@@ -244,7 +244,7 @@ model:
   # (by skipping some syncronization code). Additionally, as bptt learning should not be triggering 
   # anyway as the data sample should be within ctx size 99% of the time
   bptt_learning: true
-  bptt_learning_range: 1
+  bptt_learning_range: -1
 
   # various other settings you probably should leave alone
   grad_cp: true
