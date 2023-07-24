@@ -35,6 +35,15 @@ Meant to be a replication of the L96-D1024 experiment, with the new 12 layer wav
 - 1024 embedding size
 - 1.4B params
 
+**TokenShift-E**
+
+A reduced version of RWKV 14B L40 D5120 model. This allow us to have a stron approximate to the memory capacity performance of the raven model.
+
+- 12 wavenet layers
+- 12 normal layers
+- 5120 embedding size
+- 3B params
+
 **TokenShift-K**
 
 Replication of tokenshift-B with reduced dataset size. The goal was initially to streamline the training process of tokenshift models.
