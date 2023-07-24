@@ -180,7 +180,7 @@ model:
   # The model size setting, this MUST match
   # your current model settings, refer to the model card
   # of the downloaded model for more details
-  ctx_len: 4096
+  n_embd: 4096
   n_layer: 24
   vocab_size: 50277
 
