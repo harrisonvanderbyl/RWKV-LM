@@ -270,7 +270,10 @@ def prepare_data_static(**kargs):
         # Check if the dataset does not have a test split
         # and if so, perform the split
         if 'test' not in src_dataset.keys():
-            src_dataset = src_dataset['train'].train_test_split(test_size=kargs["test_split"],shuffle=kargs["test_split_shuffle"])
+            src_dataset = src_dataset['train'].train_test_split(
+                test_size=kargs["test_split"],shuffle=kargs["test_split_shuffle"],
+                seed=42 #Fixed seed, to prevent train/test reshuffling between test runs
+            )
         
         # Save the dataset to disk
         src_dataset.save_to_disk(kargs["data_path"])
