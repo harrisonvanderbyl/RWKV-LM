@@ -59,7 +59,7 @@ TCompileDisable    = lambda x: x
 print(f"[RWKV.model] Running RWKV model using '{RWKV_TORCH_RUN_MODE}' with torch '{torch.__version__}'")
 
 
-def wkv_mop(time_decay, time_first, k, v, wkv_state):
+def wkv_unsafe(time_decay, time_first, k, v, wkv_state):
     u = time_first.double()
     w = time_decay.double().exp().neg()
     # print k hasnan
@@ -71,6 +71,49 @@ def wkv_mop(time_decay, time_first, k, v, wkv_state):
     wkv_state[0] = (wkv_state[0]* torch.exp(w) + kk*vv) 
     wkv_state[1] = (wkv_state[1]* torch.exp(w)  + kk) 
     return y.to(k.dtype), wkv_state
+
+def wkv_safe(time_decay, time_first, k, v, wkv_state):
+    u = time_first.double()
+    w = time_decay.double().exp().neg()
+
+    ww = u + k
+    p = torch.max(wkv_state[2], ww)
+
+    e1 = torch.exp(torch.subtract((wkv_state[2]), p))
+
+    e2 = torch.exp(torch.subtract(ww, p))
+
+    a = torch.add(torch.multiply(e1, (wkv_state[0])),
+                    torch.multiply(e2, v))
+
+    b = torch.add(torch.multiply(
+        e1, (wkv_state[1])), e2)
+
+    wwn = torch.add((
+        wkv_state[2]), w)
+
+    p1 = torch.maximum(wwn, k)
+
+    e11 = torch.exp(torch.subtract(wwn, p1))
+
+    e21 = torch.exp(torch.subtract(k, p1))
+
+    outb = torch.add(torch.multiply(e11, (wkv_state[0])),
+                    torch.multiply(e21, v))
+
+    outc = torch.add(torch.multiply(
+        e11, (wkv_state[1])), e21)
+
+    # state[2:5] = ops.stack((outb, outc, p1))
+    wkv_state[0] = outb
+    wkv_state[1] = outc
+    wkv_state[2] = p1
+
+    
+    wkv = torch.divide(a, b)
+    return wkv.to(k.dtype), wkv_state
+
+wkv_mop = wkv_safe
 
 ########################################################################################################
 # RWKV: State Blocks
@@ -119,6 +162,8 @@ class BlockStateList:
         wkv_states = torch.zeros((N, 3, C),
                                  device=device,
                                  dtype=torch.float)
+        
+        wkv_states[:, 2] = -1e38
         
         # HOT FIX 2**12, 12 should = layer count
         att_shift_states = [torch.zeros((2**_ if 2**_ <= 2048 else 1, C), device=device, dtype=dtype) for _ in range(N)]
@@ -373,8 +418,8 @@ class RWKV(nn.Module):
         self.n_layer = n_layer
 
    
-
-        self.float_mode = torch.bfloat16
+        # tf 32
+        self.float_mode = torch.float16
         self.device = torch.device("cuda")
 
         self.blocks = nn.ModuleList([
