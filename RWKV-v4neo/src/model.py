@@ -289,7 +289,19 @@ class RWKV_TimeMix(MyModule):
             self.time_mix_v = nn.Parameter(torch.pow(ddd, ratio_1_to_almost0) + 0.3 * ratio_0_to_1)
             self.time_mix_r = nn.Parameter(torch.pow(ddd, 0.5 * ratio_1_to_almost0))
 
-        self.time_shift = nn.ZeroPad2d((0, 0, 1, -1))
+        exponent = layer_id
+        if exponent >= 12:
+            exponent = 0
+            exponenta = 0
+        else:
+            exponenta = 11 - exponent
+        shift = 2 ** exponent
+        shifta = 2 ** exponenta
+        self.time_shift = nn.ZeroPad2d((0, 0, shift, -shift))
+        self.time_shift_reversed = nn.ZeroPad2d((0, 0, -shifta, shifta))
+        self.time_shift_standarized = nn.ZeroPad2d((0, 0, 1, -1))
+
+        self.mixreceptance = nn.Linear(args.n_embd, args.n_embd, bias=False)
         self.key = nn.Linear(args.n_embd, args.dim_att, bias=False)
         self.value = nn.Linear(args.n_embd, args.dim_att, bias=False)
         self.receptance = nn.Linear(args.n_embd, args.dim_att, bias=False)
@@ -310,7 +322,8 @@ class RWKV_TimeMix(MyModule):
     if 'a' not in os.environ["RWKV_MY_TESTING"]:
         @MyFunction
         def jit_func(self, x):
-            xx = self.time_shift(x) # Mix x with the previous timestep to produce xk, xv, xr
+            xx = self.time_shift(x) + self.time_shift_standarized(x) + self.time_shift_reversed(x)
+            xx = self.mixreceptance(x).relu().square() * xx
             xk = x * self.time_mix_k + xx * (1 - self.time_mix_k)
             xv = x * self.time_mix_v + xx * (1 - self.time_mix_v)
             xr = x * self.time_mix_r + xx * (1 - self.time_mix_r)
@@ -367,7 +380,17 @@ class RWKV_ChannelMix(MyModule):
         super().__init__()
         self.args = args
         self.layer_id = layer_id
-        self.time_shift = nn.ZeroPad2d((0, 0, 1, -1))
+        exponent = layer_id
+        if exponent >= 12:
+            exponent = 0
+            exponenta = 0
+        else:
+            exponenta = 11 - exponent
+        shift = 2 ** exponent
+        shifta = 2 ** exponenta
+        self.time_shift = nn.ZeroPad2d((0, 0, shift, -shift))
+        self.time_shift_reversed = nn.ZeroPad2d((0, 0, -shifta, shifta))
+        self.time_shift_standarized = nn.ZeroPad2d((0, 0, 1, -1))
 
         with torch.no_grad():  # fancy init of time_mix
             ratio_1_to_almost0 = 1.0 - (layer_id / args.n_layer)  # 1 to ~0
@@ -380,10 +403,12 @@ class RWKV_ChannelMix(MyModule):
         self.key = nn.Linear(args.n_embd, args.dim_ffn, bias=False)
         self.receptance = nn.Linear(args.n_embd, args.n_embd, bias=False)
         self.value = nn.Linear(args.dim_ffn, args.n_embd, bias=False)
+        self.mixreceptance = nn.Linear(args.n_embd, args.n_embd, bias=False)
 
     @MyFunction
     def forward(self, x):
-        xx = self.time_shift(x)
+        xx = self.time_shift(x) + self.time_shift_standarized(x) + self.time_shift_reversed(x)
+        xx = self.mixreceptance(x).relu().square() * xx
         xk = x * self.time_mix_k + xx * (1 - self.time_mix_k)
         xr = x * self.time_mix_r + xx * (1 - self.time_mix_r)
         k = self.key(xk)
