@@ -289,7 +289,7 @@ class RWKV_TimeMix(MyModule):
             self.time_mix_v = nn.Parameter(torch.pow(ddd, ratio_1_to_almost0) + 0.3 * ratio_0_to_1)
             self.time_mix_r = nn.Parameter(torch.pow(ddd, 0.5 * ratio_1_to_almost0))
 
-        exponent = layer_id
+        exponent = 11-layer_id
         
         shift = 2**exponent
 
