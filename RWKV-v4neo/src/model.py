@@ -289,7 +289,11 @@ class RWKV_TimeMix(MyModule):
             self.time_mix_v = nn.Parameter(torch.pow(ddd, ratio_1_to_almost0) + 0.3 * ratio_0_to_1)
             self.time_mix_r = nn.Parameter(torch.pow(ddd, 0.5 * ratio_1_to_almost0))
 
-        self.time_shift = nn.ZeroPad2d((0, 0, 1, -1))
+        exponent = layer_id
+        
+        shift = 2**exponent
+
+        self.time_shift = (torch.range(0, self.ctx_len - 1) - shift).relu().to(torch.long)
         self.key = nn.Linear(args.n_embd, args.dim_att, bias=False)
         self.value = nn.Linear(args.n_embd, args.dim_att, bias=False)
         self.receptance = nn.Linear(args.n_embd, args.dim_att, bias=False)
@@ -309,8 +313,8 @@ class RWKV_TimeMix(MyModule):
 
     if 'a' not in os.environ["RWKV_MY_TESTING"]:
         @MyFunction
-        def jit_func(self, x):
-            xx = self.time_shift(x) # Mix x with the previous timestep to produce xk, xv, xr
+        def jit_func(self, x, emb):
+            xx = emb[self.time_shift] # Mix x with the previous timestep to produce xk, xv, xr
             xk = x * self.time_mix_k + xx * (1 - self.time_mix_k)
             xv = x * self.time_mix_v + xx * (1 - self.time_mix_v)
             xr = x * self.time_mix_r + xx * (1 - self.time_mix_r)
@@ -320,9 +324,9 @@ class RWKV_TimeMix(MyModule):
             sr = torch.sigmoid(r)
             return sr, k, v
 
-        def forward(self, x):
+        def forward(self, x, emb):
             B, T, C = x.size()  # x = (Batch,Time,Channel)
-            sr, k, v = self.jit_func(x)
+            sr, k, v = self.jit_func(x, emb)
             rwkv = sr * RUN_CUDA(B, T, self.args.dim_att, self.time_decay, self.time_first, k, v)
             return self.output(rwkv)
 
@@ -336,8 +340,8 @@ class RWKV_TimeMix(MyModule):
             return x
 
         @MyFunction
-        def jit_funcQKV(self, x):
-            xx = self.time_shift(x) # Mix x with the previous timestep to produce xk, xv, xr
+        def jit_funcQKV(self, x, emb):
+            xx = emb(x)
             xk = x * self.time_mix_k + xx * (1 - self.time_mix_k)
             xv = x * self.time_mix_v + xx * (1 - self.time_mix_v)
             xr = x * self.time_mix_r + xx * (1 - self.time_mix_r)
@@ -472,7 +476,7 @@ class Block(nn.Module):
         if self.layer_id == 0 and args.pre_ffn > 0:
             x = x + self.ffnPre(self.ln1(x))
         else:
-            x = x + self.att(self.ln1(x))
+            x = x + self.att(self.ln1(x),x_emb)
         x = x + self.ffn(self.ln2(x))
 
         if args.tiny_att_dim > 0 and self.layer_id == args.tiny_att_layer:
@@ -616,7 +620,7 @@ class RWKV(pl.LightningModule):
                 if args.grad_cp == 1:
                     x = deepspeed.checkpointing.checkpoint(block, x)
                 else:
-                    x = block(x)
+                    x = block(x, self.emb.weight)
 
         x = self.ln_out(x)
 
