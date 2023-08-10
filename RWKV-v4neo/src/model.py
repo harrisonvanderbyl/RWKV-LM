@@ -183,6 +183,15 @@ class RWKV_TimeMix_RWKV5_Preview(MyModule):
 
         self.ln_x = nn.GroupNorm(self.n_head, self.n_embd)
 
+        self.output2 = nn.Linear(args.dim_att, args.n_embd, bias=False)
+        exponent = layer_id
+        if exponent > 11:
+            exponent = 0
+        
+        shift = 2 ** exponent
+
+        self.outputshift = nn.ZeroPad2d((0, 0, shift, -shift))
+
     @MyFunction
     def jit_func(self, x):
         B, TT, C = x.size()
@@ -221,7 +230,7 @@ class RWKV_TimeMix_RWKV5_Preview(MyModule):
         
         x = x.transpose(1, 2).contiguous().view(B * TT, H*S) # BHTS -> BTHS -> BTC
         x = self.ln_x(x).view(B, TT, H*S)
-        return self.output(x)
+        return self.output(x).sigmoid() * self.output2(self.outputshift(x)).relu().square()
     
     def forward(self, x):
         H = self.n_head
@@ -263,7 +272,7 @@ class RWKV_TimeMix_RWKV5_Preview(MyModule):
 ########################################################################################################
 # RWKV: RWKV Time-mix + RWKV Channel-mix
 ########################################################################################################
-
+os.environ["RWKV_MY_TESTING"] = "r2"
 
 class RWKV_TimeMix(MyModule):
     def __init__(self, args, layer_id):
