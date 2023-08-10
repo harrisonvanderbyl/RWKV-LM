@@ -300,7 +300,16 @@ class RWKV_TimeMix(MyModule):
         self.key = nn.Linear(args.n_embd, args.dim_att, bias=False)
         self.value = nn.Linear(args.n_embd, args.dim_att, bias=False)
         self.receptance = nn.Linear(args.n_embd, args.dim_att, bias=False)
+        # self.output = nn.Linear(args.dim_att*2, args.n_embd, bias=False)
         self.output = nn.Linear(args.dim_att, args.n_embd, bias=False)
+        self.output2 = nn.Linear(args.dim_att, args.n_embd, bias=False)
+        exponent = layer_id
+        if exponent > 11:
+            exponent = 0
+        
+        shift = 2 ** exponent
+
+        self.outputshift = nn.ZeroPad2d((0, 0, shift, -shift))
 
         if 'a' in os.environ["RWKV_MY_TESTING"]:
             self.register_buffer("att_mask", torch.tril(torch.ones(args.ctx_len, args.ctx_len)))
@@ -331,8 +340,8 @@ class RWKV_TimeMix(MyModule):
             B, T, C = x.size()  # x = (Batch,Time,Channel)
             sr, k, v = self.jit_func(x)
             rwkv = sr * RUN_CUDA(B, T, self.args.dim_att, self.time_decay, self.time_first, k, v)
-            return self.output(rwkv)
-
+            #return self.output(torch.cat([self.outputshift(rwkv), rwkv], dim=-1))
+            return self.output(rwkv).sigmoid() * self.output2(self.outputshift(rwkv)).relu().square()
     if 'a' in os.environ["RWKV_MY_TESTING"]:
         @MyFunction
         def QKV(self, q, k, v):
