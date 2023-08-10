@@ -137,8 +137,9 @@ def wkv_op(time_decay, time_first, k, v, wkv_state):
 
 class TimeMixState:
 
-    def __init__(self, shift_state: torch.Tensor, wkv_state: torch.Tensor):
+    def __init__(self, shift_state_wave: torch.Tensor, shift_state: torch.Tensor, wkv_state: torch.Tensor):
         self.shift_state = shift_state
+        self.shift_state_wave = shift_state_wave
         self.wkv_state = wkv_state
 
 
@@ -158,10 +159,11 @@ class BlockState:
 
 class BlockStateList:
 
-    def __init__(self, att_shift_states, ffn_shift_states, wkv_states):
+    def __init__(self, att_shift_states_wave, att_shift_states, ffn_shift_states, wkv_states):
         self.wkv_states = wkv_states
         self.att_shift_states = att_shift_states
         self.ffn_shift_states = ffn_shift_states
+        self.att_shift_states_wave = att_shift_states_wave
 
     # @ TCompileMax (no difference)
     @staticmethod
@@ -170,6 +172,7 @@ class BlockStateList:
         result.wkv_states[:] = 0
         result.wkv_states[:, :, :, -1] = -1e38
         result.att_shift_states[:] = 0
+        result.att_shift_states_wave[:] = 0
         result.ffn_shift_states[:] = 0
         return result
 
@@ -181,18 +184,20 @@ class BlockStateList:
                                  dtype=torch.float)
         
         # @TODO : Make the state storage layer, configurable (instead of hard code 12 now)
-        att_shift_states = torch.empty((N, B, 2**12, C), device=device, dtype=dtype)
+        att_shift_states_wave = torch.empty((N, B, 2**12, C), device=device, dtype=dtype)
+        att_shift_states = torch.empty((N, B, 1, C), device=device, dtype=dtype)
         ffn_shift_states = torch.empty((N, B, 1, C), device=device, dtype=dtype)
-        return BlockStateList(att_shift_states, ffn_shift_states, wkv_states)
+        return BlockStateList(att_shift_states_wave, att_shift_states, ffn_shift_states, wkv_states)
 
     def __getitem__(self, layer: int):
         return BlockState(
-            TimeMixState(self.att_shift_states[layer], self.wkv_states[layer]),
+            TimeMixState(self.att_shift_states_wave[layer],self.att_shift_states[layer], self.wkv_states[layer]),
             ChannelMixState(self.ffn_shift_states[layer]))
 
     def __setitem__(self, layer: int, state: BlockState):
         # @TODO : Make the state storage layer, configurable (instead of hard code 12 now)
-        self.att_shift_states[layer] = state.time_mix_state.shift_state[:,-(2**12):,:]
+        self.att_shift_states_wave[layer] = state.time_mix_state.shift_state[:,-(2**12):,:]
+        self.att_shift_states[layer] = state.channel_mix_state.shift_state
         self.ffn_shift_states[layer] = state.channel_mix_state.shift_state
         self.wkv_states[layer] = state.time_mix_state.wkv_state
 
@@ -238,19 +243,21 @@ class RWKV_TimeMix(JITModClass):
         self.value = nn.Linear(n_embd, dim_att, bias=False)
         self.receptance = nn.Linear(n_embd, dim_att, bias=False)
         self.output = nn.Linear(dim_att, n_embd, bias=False)
+        self.output2 = nn.Linear(dim_att, n_embd, bias=False)
 
         shiftamount = pow(2,layer_id)
         if(shiftamount > 2048):
             shiftamount = 1
-        self.time_shift = nn.ZeroPad2d((0, 0, shiftamount, -shiftamount))
+        self.time_shift = nn.ZeroPad2d((0, 0, 1, -1))
+        self.time_shift2 = nn.ZeroPad2d((0, 0, shiftamount, -shiftamount))
 
     @JITModMethod
     @TCompileMax
     def _forward_kvsr(self, x, last_state: TimeMixState):
         # Mix x with the previous timestep to produce xk, xv, xr
-        xxx = torch.concat((last_state.shift_state, x), dim=1)
-        xxxx = self.time_shift(xxx)
-        xx = xxxx[:, -x.shape[1]:, :]
+        xx = torch.concat((last_state.shift_state, x[:, :-1]),
+                          dim=1)
+        
 
         xk = x * self.time_mix_k + xx * (1 - self.time_mix_k)
         xv = x * self.time_mix_v + xx * (1 - self.time_mix_v)
@@ -269,12 +276,19 @@ class RWKV_TimeMix(JITModClass):
         if v.dtype != torch.bfloat16:
             v = v.to(torch.bfloat16)
 
-        return k, v, sr, xxx
+        return k, v, sr, x
 
     @JITModMethod
     @TCompileMax
-    def _forward_out(self, sr, y, x_l, new_wkv_state):
-        return self.output(sr * y), TimeMixState(x_l, new_wkv_state)
+    def _forward_out(self, sr, y, x_l, new_wkv_state, wave_state):
+        x = sr*y
+
+        xxx = torch.concat((wave_state, x), dim=1)
+        xxxx = self.time_shift2(xxx)
+        xx = xxxx[:, -x.shape[1]:, :]
+
+        out = self.output(x).sigmoid() * self.output2(xx).relu().square() 
+        return out, TimeMixState(xxx, x_l, new_wkv_state)
 
     @JITModMethod
     @TCompileBaseline
@@ -289,7 +303,7 @@ class RWKV_TimeMix(JITModClass):
         # Perform the WKV op via cuda code
         y, new_wkv_state = wkv_op(self.time_decay, self.time_first,
                                   k, v, last_state.wkv_state)
-        return self._forward_out(sr, y, xxx, new_wkv_state)
+        return self._forward_out(sr, y, xxx, new_wkv_state, last_state.shift_state_wave)
 
 
 ########################################################################################################
