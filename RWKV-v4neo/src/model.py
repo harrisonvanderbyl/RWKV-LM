@@ -781,7 +781,11 @@ class RWKV(L.LightningModule):
         #         zip(self.blocks,
         #             BlockStateList(last_shift_states, last_wkv_states))):
         # ---
+        xstack = torch.zeros_like(x)
+
         for i in range(len(self.blocks)):
+            xstack = x + 2*xstack 
+            x = xstack + x
             block = self.blocks[i]
             last_state = cur_bs_list[i]
             if self.grad_cp:
