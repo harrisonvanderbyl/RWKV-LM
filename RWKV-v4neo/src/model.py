@@ -2,6 +2,7 @@
 # The RWKV Language Model - https://github.com/BlinkDL/RWKV-LM
 ########################################################################################################
 
+from argparse import Namespace
 import os, math, gc, importlib
 import torch
 # torch._C._jit_set_profiling_executor(True)
@@ -16,7 +17,7 @@ if importlib.util.find_spec('deepspeed'):
     from deepspeed.ops.adam import DeepSpeedCPUAdam, FusedAdam
 
 # from deepspeed.runtime.fp16.onebit.zoadam import ZeroOneAdam
-
+# os.environ["RWKV_MY_TESTING"] = "r"
 try:
     print('RWKV_MY_TESTING', os.environ["RWKV_MY_TESTING"])
 except:
@@ -176,10 +177,10 @@ class RWKV_TimeMix_RWKV5_Preview(MyModule):
                 self.time_first = nn.Parameter(torch.ones(self.n_head) * (-3.0))
 
         self.time_shift = nn.ZeroPad2d((0, 0, 1, -1))
-        self.receptance = nn.Linear(args.n_embd, args.dim_att, bias=False)
-        self.key = nn.Linear(args.n_embd, args.dim_att, bias=False)
-        self.value = nn.Linear(args.n_embd, args.dim_att, bias=False)
-        self.output = nn.Linear(args.dim_att, args.n_embd, bias=False)
+        self.receptance = nn.Linear(args.n_embd, args.n_embd, bias=False)
+        self.key = nn.Linear(args.n_embd, args.n_embd, bias=False)
+        self.value = nn.Linear(args.n_embd, args.n_embd, bias=False)
+        self.output = nn.Linear(args.n_embd, args.n_embd, bias=False)
 
         self.ln_x = nn.GroupNorm(self.n_head, self.n_embd)
 
@@ -191,7 +192,7 @@ class RWKV_TimeMix_RWKV5_Preview(MyModule):
         xk = x * self.time_mix_k + xx * (1 - self.time_mix_k)
         xv = x * self.time_mix_v + xx * (1 - self.time_mix_v)
         xr = x * self.time_mix_r + xx * (1 - self.time_mix_r)
-
+  
         r = self.receptance(xr).view(B, TT, self.n_head, self.head_size).transpose(1, 2)            # BTC -> BHTS
         k = self.key(xk).view(B, TT, self.n_head, self.head_size).transpose(1, 2).transpose(-2, -1) # BTC -> BHTS -> BHST
         v = self.value(xv).view(B, TT, self.n_head, self.head_size).transpose(1, 2)                 # BTC -> BHTS
@@ -297,75 +298,30 @@ class RWKV_TimeMix(MyModule):
             self.time_mix_r = nn.Parameter(torch.pow(ddd, 0.5 * ratio_1_to_almost0))
 
         self.time_shift = nn.ZeroPad2d((0, 0, 1, -1))
-        self.key = nn.Linear(args.n_embd, args.dim_att, bias=False)
-        self.value = nn.Linear(args.n_embd, args.dim_att, bias=False)
-        self.receptance = nn.Linear(args.n_embd, args.dim_att, bias=False)
-        self.output = nn.Linear(args.dim_att, args.n_embd, bias=False)
+        self.key = nn.Linear(args.n_embd, args.n_embd, bias=False)
+        self.value = nn.Linear(args.n_embd, args.n_embd, bias=False)
+        self.receptance = nn.Linear(args.n_embd, args.n_embd, bias=False)
+        self.output = nn.Linear(args.n_embd, args.n_embd, bias=False)
 
-        if 'a' in os.environ["RWKV_MY_TESTING"]:
-            self.register_buffer("att_mask", torch.tril(torch.ones(args.ctx_len, args.ctx_len)))
-            d_qkv = args.n_embd // 16
-            self.qq = nn.Linear(args.n_embd, d_qkv, bias=False)
-            self.kk = nn.Linear(args.n_embd, d_qkv, bias=False)
-            self.vv = nn.Linear(args.n_embd, d_qkv, bias=False)
-            self.oo = nn.Linear(d_qkv, args.n_embd, bias=False)
-            with torch.no_grad():
-                self.time_mix_qq = nn.Parameter(torch.pow(ddd, ratio_1_to_almost0))
-                self.time_mix_kk = nn.Parameter(torch.pow(ddd, ratio_1_to_almost0))
-                self.time_mix_vv = nn.Parameter(torch.pow(ddd, ratio_1_to_almost0) + 0.3 * ratio_0_to_1)
+      
+    @MyFunction
+    def jit_func(self, x):
+        xx = self.time_shift(x) # Mix x with the previous timestep to produce xk, xv, xr
+        xk = x * self.time_mix_k + xx * (1 - self.time_mix_k)
+        xv = x * self.time_mix_v + xx * (1 - self.time_mix_v)
+        xr = x * self.time_mix_r + xx * (1 - self.time_mix_r)
+        k = self.key(xk)
+        v = self.value(xv)
+        r = self.receptance(xr)
+        sr = torch.sigmoid(r)
+        return sr, k, v
 
-    if 'a' not in os.environ["RWKV_MY_TESTING"]:
-        @MyFunction
-        def jit_func(self, x):
-            xx = self.time_shift(x) # Mix x with the previous timestep to produce xk, xv, xr
-            xk = x * self.time_mix_k + xx * (1 - self.time_mix_k)
-            xv = x * self.time_mix_v + xx * (1 - self.time_mix_v)
-            xr = x * self.time_mix_r + xx * (1 - self.time_mix_r)
-            k = self.key(xk)
-            v = self.value(xv)
-            r = self.receptance(xr)
-            sr = torch.sigmoid(r)
-            return sr, k, v
+    def forward(self, x):
+        B, T, C = x.size()  # x = (Batch,Time,Channel)
+        sr, k, v = self.jit_func(x)
+        rwkv = sr * RUN_CUDA(B, T, self.args.n_embd, self.time_decay, self.time_first, k, v)
+        return self.output(rwkv)
 
-        def forward(self, x):
-            B, T, C = x.size()  # x = (Batch,Time,Channel)
-            sr, k, v = self.jit_func(x)
-            rwkv = sr * RUN_CUDA(B, T, self.args.dim_att, self.time_decay, self.time_first, k, v)
-            return self.output(rwkv)
-
-    if 'a' in os.environ["RWKV_MY_TESTING"]:
-        @MyFunction
-        def QKV(self, q, k, v):
-            att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
-            att = att.masked_fill(self.att_mask == 0, float('-inf'))
-            att = F.softmax(att, dim = -1)
-            x = att @ v
-            return x
-
-        @MyFunction
-        def jit_funcQKV(self, x):
-            xx = self.time_shift(x) # Mix x with the previous timestep to produce xk, xv, xr
-            xk = x * self.time_mix_k + xx * (1 - self.time_mix_k)
-            xv = x * self.time_mix_v + xx * (1 - self.time_mix_v)
-            xr = x * self.time_mix_r + xx * (1 - self.time_mix_r)
-            xqq = x * self.time_mix_qq + xx * (1 - self.time_mix_qq)
-            xkk = x * self.time_mix_kk + xx * (1 - self.time_mix_kk)
-            xvv = x * self.time_mix_vv + xx * (1 - self.time_mix_vv)
-            k = self.key(xk)
-            v = self.value(xv)
-            r = self.receptance(xr)
-            sr = torch.sigmoid(r)
-            qq = self.qq(xqq)
-            kk = self.kk(xkk)
-            vv = self.vv(xvv)
-            return sr, k, v, qq, kk, vv
-
-        def forward(self, x):
-            B, T, C = x.size()  # x = (Batch,Time,Channel)
-            sr, k, v, qq, kk, vv = self.jit_funcQKV(x)
-            rwkv = sr * RUN_CUDA(B, T, self.args.dim_att, self.time_decay, self.time_first, k, v)
-            rwkv = self.output(rwkv) + self.oo(self.QKV(qq, kk, vv))
-            return rwkv
 
 ########################################################################################################
 
@@ -374,7 +330,7 @@ class RWKV_ChannelMix(MyModule):
         super().__init__()
         self.args = args
         self.layer_id = layer_id
-        self.time_shift = nn.ZeroPad2d((0, 0, 1, -1))
+        self.time_shift = nn.ZeroPad2d((0, 0, layer_id+1, -layer_id-1))
 
         with torch.no_grad():  # fancy init of time_mix
             ratio_1_to_almost0 = 1.0 - (layer_id / args.n_layer)  # 1 to ~0
@@ -384,48 +340,22 @@ class RWKV_ChannelMix(MyModule):
             self.time_mix_k = nn.Parameter(torch.pow(ddd, ratio_1_to_almost0))
             self.time_mix_r = nn.Parameter(torch.pow(ddd, ratio_1_to_almost0))
         
-        self.key = nn.Linear(args.n_embd, args.dim_ffn, bias=False)
+        self.key = nn.Linear(args.n_embd, args.n_embd*4, bias=False)
         self.receptance = nn.Linear(args.n_embd, args.n_embd, bias=False)
-        self.value = nn.Linear(args.dim_ffn, args.n_embd, bias=False)
+        self.value = nn.Linear(args.n_embd*4, args.n_embd, bias=False)
+
+        
 
     @MyFunction
     def forward(self, x):
-        xx = self.time_shift(x)
+        xx = self.time_shift(x) 
+        # xk = (x).clone().sin().add(1.0).multiply(0.5) ** (self.time_shift(()).relu().add(torch.e).log() )
         xk = x * self.time_mix_k + xx * (1 - self.time_mix_k)
         xr = x * self.time_mix_r + xx * (1 - self.time_mix_r)
         k = self.key(xk)
         k = torch.square(torch.relu(k))
         kv = self.value(k)
         return torch.sigmoid(self.receptance(xr)) * kv
-
-class MishGLU(MyModule):
-    def __init__(self, args, layer_id):
-        super().__init__()
-        self.args = args
-        self.layer_id = layer_id
-        self.time_shift = nn.ZeroPad2d((0, 0, 1, -1))
-
-        with torch.no_grad():
-            ratio_1_to_almost0 = 1.0 - (layer_id / args.n_layer)
-
-            x = torch.ones(1, 1, args.n_embd)
-            for i in range(args.n_embd):
-                x[0, 0, i] = i / args.n_embd
-
-            self.time_mix_k = nn.Parameter(torch.pow(x, ratio_1_to_almost0))
-            self.time_mix_r = nn.Parameter(torch.pow(x, ratio_1_to_almost0))
-            self.aa = nn.Linear(args.n_embd, args.dim_ffn, bias=False)
-            self.bb = nn.Linear(args.n_embd, args.dim_ffn, bias=False)
-            self.value = nn.Linear(args.dim_ffn, args.n_embd, bias=False)
-
-    @MyFunction
-    def forward(self, x):
-        xx = self.time_shift(x)
-        xa = x * self.time_mix_k + xx * (1 - self.time_mix_k)
-        xb = x * self.time_mix_r + xx * (1 - self.time_mix_r)
-        a = self.aa(xa)
-        b = self.bb(xb)
-        return self.value(a * F.mish(b))
 
 ########################################################################################################
 # The RWKV Model with our blocks
@@ -443,30 +373,20 @@ class Block(nn.Module):
 
         if self.layer_id == 0:
             self.ln0 = nn.LayerNorm(args.n_embd)
-            if args.my_pos_emb > 0:
-                self.pos_emb_x = nn.Parameter(torch.zeros((1,args.my_pos_emb,args.n_embd)))
-                self.pos_emb_y = nn.Parameter(torch.zeros((args.my_pos_emb,1,args.n_embd)))
 
-        if self.layer_id == 0 and self.args.pre_ffn > 0:
-            self.ffnPre = RWKV_ChannelMix(args, 0)
+        self.out = nn.Linear(args.n_embd, args.n_head2, bias=False)
+        self.out2 = nn.Linear(args.n_embd,args.n_head2, bias=False)
+        # self.pad = nn.ZeroPad2d((0, 0, 0, 0, 0,0,0,args.n_head2 - args.n_embd))
+            
+       
+        if 'r' in os.environ["RWKV_MY_TESTING"]:
+            self.att = RWKV_TimeMix_RWKV5_Preview(args, layer_id)
         else:
-            if 'r' in os.environ["RWKV_MY_TESTING"]:
-                self.att = RWKV_TimeMix_RWKV5_Preview(args, layer_id)
-            else:
-                self.att = RWKV_TimeMix(args, layer_id)
+            self.att = RWKV_TimeMix(args, layer_id)
 
-        if 'g' in os.environ["RWKV_MY_TESTING"]:
-            self.ffn = MishGLU(args, layer_id)
-        else:
-            self.ffn = RWKV_ChannelMix(args, layer_id)
+        self.ffn = RWKV_ChannelMix(args, layer_id)
         
-        if args.tiny_att_dim > 0 and self.layer_id == args.tiny_att_layer:
-            self.tiny_ln = nn.LayerNorm(args.n_embd)
-            self.tiny_q = nn.Linear(args.n_embd, args.tiny_att_dim, bias=False)
-            self.tiny_k = nn.Linear(args.n_embd, args.tiny_att_dim, bias=False)
-            self.tiny_v = nn.Linear(args.n_embd, args.n_embd, bias=False)
-            self.register_buffer("tiny_mask", torch.tril(torch.ones(args.ctx_len, args.ctx_len)))
-
+     
         if args.dropout > 0:
             self.drop0 = nn.Dropout(p = args.dropout)
             self.drop1 = nn.Dropout(p = args.dropout)
@@ -476,30 +396,15 @@ class Block(nn.Module):
         B, T, C = x.size()
         if self.layer_id == 0:
             x = self.ln0(x)
-            if args.my_pos_emb > 0:
-                pos_emb = (self.pos_emb_x + self.pos_emb_y).reshape(T+1, -1)[:-1,:]
-                x = x + pos_emb
+
 
         if self.args.dropout == 0:
-            if self.layer_id == 0 and args.pre_ffn > 0:
-                x = x + self.ffnPre(self.ln1(x))
-            else:
-                x = x + self.att(self.ln1(x))
+            x = x + self.att(self.ln1(x))
             x = x + self.ffn(self.ln2(x))
         else:
-            if self.layer_id == 0 and args.pre_ffn > 0:
-                x = self.drop0(x + self.ffnPre(self.ln1(x)))
-            else:
-                x = self.drop0(x + self.att(self.ln1(x)))
+            x = self.drop0(x + self.att(self.ln1(x)))
             x = self.drop1(x + self.ffn(self.ln2(x)))
-
-        if args.tiny_att_dim > 0 and self.layer_id == args.tiny_att_layer:
-            xx = self.tiny_ln(x)
-            q = self.tiny_q(xx)[:, :T, :]
-            k = self.tiny_k(xx)[:, :T, :]
-            c = (q @ k.transpose(-2, -1)) * (args.tiny_att_dim ** (-0.5))
-            c = c.masked_fill(self.tiny_mask[:T, :T] == 0, 0)
-            x = x + c @ self.tiny_v(x_emb)
+        # x = self.out(x)/(1+self.out2(x).relu())
         return x
 
 
@@ -533,19 +438,31 @@ class RWKV(pl.LightningModule):
         if not hasattr(args, 'tiny_att_dim'):
             args.tiny_att_dim = -1
 
-        self.emb = nn.Embedding(args.vocab_size, args.n_embd)
+        startpoint = 2**17
 
-        self.blocks = nn.ModuleList([Block(args, i) for i in range(args.n_layer)])
+        self.emb = nn.Embedding(args.vocab_size, min(startpoint, args.n_embd))
+
+        #clone and convert namespace to object
+        def set_args(argsad,num,num2):
+            argsa = Namespace(**vars(argsad), n_head2 = num2)
+            argsa.n_embd = num
+            return argsa
+
+        blocks = [Block(set_args(args,min(startpoint + 128*i,args.n_embd),min(startpoint + 128*(i+1),args.n_embd)), i) for i in range(args.n_layer)]
+
+        # arange them to be blocks[0], between[0], blocks[1], between[1], ...
+        self.blocks = nn.ModuleList(blocks)
 
         self.ln_out = nn.LayerNorm(args.n_embd)
         self.head = nn.Linear(args.n_embd, args.vocab_size, bias=False)
-
-        if args.head_qk > 0:
-            self.head_q = nn.Linear(args.n_embd, args.head_qk, bias=False)
-            self.head_k = nn.Linear(args.n_embd, args.head_qk, bias=False)
-            self.register_buffer("copy_mask", torch.tril(torch.ones(args.ctx_len, args.ctx_len)))
         if args.dropout > 0:
             self.drop0 = nn.Dropout(p = args.dropout)
+
+        self.time_shift = [torch.nn.ZeroPad2d((0,0,2**min(i,11),-(2**min(i,11)))) for i in range(args.n_layer)]
+        self.time_shift_1 = torch.nn.ZeroPad2d((0,0,1,-1))
+        # self.ln_att = nn.ModuleList([torch.nn.Linear(args.n_embd, args.n_embd, False) for i in range(args.n_layer)])
+        # self.mixer = nn.Parameter(torch.ones(args.n_layer, args.n_embd)*0.5)
+        
 
     def configure_optimizers(self):
         args = self.args
@@ -629,40 +546,26 @@ class RWKV(pl.LightningModule):
 
         x = self.emb(idx)
         x_emb = x
+        
+        doWavenet = True
 
         if args.dropout > 0:
             x = self.drop0(x)
-        if args.tiny_att_dim > 0:
-            for block in self.blocks:
-                if args.grad_cp == 1:
-                    x = deepspeed.checkpointing.checkpoint(block, x, x_emb)
-                else:
-                    x = block(x, x_emb)
-        else:
-            for block in self.blocks:
+        
+        xstack = torch.zeros_like(x)
+        for block in self.blocks:
+                xstack = x + 2*xstack 
+                x = xstack + x
+                    
+                    
                 if args.grad_cp == 1:
                     x = deepspeed.checkpointing.checkpoint(block, x)
                 else:
                     x = block(x)
-
+       
         x = self.ln_out(x)
 
-        if args.head_qk > 0:
-            q = self.head_q(x)[:, :T, :]
-            k = self.head_k(x)[:, :T, :]
-            c = (q @ k.transpose(-2, -1)) * (1.0 / args.head_qk)
-            c = c.masked_fill(self.copy_mask[:T, :T] == 0, 0)
-
-            if "32" in os.environ["RWKV_FLOAT_MODE"]:
-                c = c @ F.one_hot(idx, num_classes=args.vocab_size)
-            elif os.environ["RWKV_FLOAT_MODE"] == "fp16":
-                c = c @ F.one_hot(idx, num_classes=args.vocab_size).half()
-            elif os.environ["RWKV_FLOAT_MODE"] == "bf16":
-                c = c @ F.one_hot(idx, num_classes=args.vocab_size).bfloat16()
-
-            x = self.head(x) + c
-        else:
-            x = self.head(x)
+        x = self.head(x)
 
         return x
 

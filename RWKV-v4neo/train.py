@@ -52,24 +52,24 @@ if __name__ == "__main__":
 
     parser = ArgumentParser()
 
-    parser.add_argument("--load_model", default="", type=str)  # full path, with .pth
+    parser.add_argument("--load_model", default="/home/harrison/Desktop/RWKV-LM/RWKV-v4neo/out/rwkv-0.pth", type=str)  # full path, with .pth
     parser.add_argument("--wandb", default="", type=str)  # wandb project name. if "" then don't use wandb
     parser.add_argument("--proj_dir", default="out", type=str)
     parser.add_argument("--random_seed", default="-1", type=int)
 
-    parser.add_argument("--data_file", default="", type=str)
+    parser.add_argument("--data_file", default="./train.txt", type=str)
     parser.add_argument("--data_type", default="utf-8", type=str)
     parser.add_argument("--vocab_size", default=0, type=int)  # vocab_size = 0 means auto (for char-level LM and .txt data)
 
-    parser.add_argument("--ctx_len", default=1024, type=int)
+    parser.add_argument("--ctx_len", default=4096, type=int)
     parser.add_argument("--epoch_steps", default=1000, type=int)  # a mini "epoch" has [epoch_steps] steps
     parser.add_argument("--epoch_count", default=500, type=int)  # train for this many "epochs". will continue afterwards with lr = lr_final
     parser.add_argument("--epoch_begin", default=0, type=int)  # if you load a model trained for x "epochs", set epoch_begin = x
     parser.add_argument("--epoch_save", default=5, type=int)  # save the model every [epoch_save] "epochs"
 
-    parser.add_argument("--micro_bsz", default=12, type=int)  # micro batch size (batch size per GPU)
+    parser.add_argument("--micro_bsz", default=16, type=int)  # micro batch size (batch size per GPU)
     parser.add_argument("--n_layer", default=6, type=int)
-    parser.add_argument("--n_embd", default=512, type=int)
+    parser.add_argument("--n_embd", default=256, type=int)
     parser.add_argument("--dim_att", default=0, type=int)
     parser.add_argument("--dim_ffn", default=0, type=int)
     parser.add_argument("--pre_ffn", default=0, type=int)  # replace first att layer by ffn (sometimes better)
@@ -115,6 +115,7 @@ if __name__ == "__main__":
     parser.add_argument("--my_testing", default='', type=str)
     parser.add_argument("--my_exit", default=99999999, type=int)
     parser.add_argument("--my_exit_tokens", default=0, type=int)
+    parser.add_argument("--root_device", default="cuda", type=str)
 
     parser = Trainer.add_argparse_args(parser)
     args = parser.parse_args()
@@ -334,7 +335,7 @@ if __name__ == "__main__":
             if k not in load_keys:
                 load_dict[k] = model.state_dict()[k]
     model.load_state_dict(load_dict)
-
+    
     trainer = Trainer.from_argparse_args(
         args,
         callbacks=[train_callback(args)],
@@ -344,6 +345,7 @@ if __name__ == "__main__":
         for n in model.state_dict():
             shape = model.state_dict()[n].shape
             shape = [i for i in shape if i != 1]
+            print(shape)
             if len(shape) > 1:
                 print(f"{str(shape[0]).ljust(5)} {str(shape[1]).ljust(5)} {n}")
             else:
@@ -355,5 +357,5 @@ if __name__ == "__main__":
 
     # must set shuffle=False, persistent_workers=False (because worker is in another thread)
     data_loader = DataLoader(train_data, shuffle=False, pin_memory=True, batch_size=args.micro_bsz, num_workers=1, persistent_workers=False, drop_last=True)
-
+    # set model and trainer to cuda
     trainer.fit(model, data_loader)

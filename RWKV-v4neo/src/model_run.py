@@ -19,9 +19,9 @@ MyFunction = __nop
 # MyFunction = torchdynamo.optimize(os.environ["RWKV_RUN_BACKEND"]) # !!!BUGGY!!! wrong output
 
 # try torch jit --> faster for fp32, slower for fp16 (why?)
-if os.environ["RWKV_JIT_ON"] == "1":
-    MyModule = torch.jit.ScriptModule
-    MyFunction = torch.jit.script_method
+# if os.environ["RWKV_JIT_ON"] == "1":
+#     MyModule = torch.jit.ScriptModule
+#     MyFunction = torch.jit.script_method
 
 RWKV_HEAD_QK_DIM = 0
 print(f'\nRWKV_HEAD_QK_DIM {RWKV_HEAD_QK_DIM} RWKV_JIT_ON {os.environ["RWKV_JIT_ON"]}\n')
@@ -119,19 +119,22 @@ class RWKV_RNN(MyModule):
     # state[] 0=ffn_xx 1=att_xx 2=att_aa 3=att_bb 4=att_pp
 
     @MyFunction
-    def FF(self, x, state, i:int, time_mix_k, time_mix_r, kw, vw, rw):
+    def FF(self, x, state:List[torch.Tensor], i:int, time_mix_k, time_mix_r, kw, vw, rw):
         if self.FLOAT_MODE == "bf16":
-            xk = x * time_mix_k + state[5*i+0].type(torch.bfloat16) * (1 - time_mix_k)
-            xr = x * time_mix_r + state[5*i+0].type(torch.bfloat16) * (1 - time_mix_r)
-            state[5*i+0] = x.float()
+            xk = x * time_mix_k + state[i][-1].type(torch.bfloat16) * (1 - time_mix_k)
+            xr = x * time_mix_r + state[i][-1].type(torch.bfloat16) * (1 - time_mix_r)
         elif self.FLOAT_MODE == "fp16":
-            xk = x * time_mix_k + state[5*i+0].half() * (1 - time_mix_k)
-            xr = x * time_mix_r + state[5*i+0].half() * (1 - time_mix_r)
-            state[5*i+0] = x.float()            
+            xk = x * time_mix_k + state[i][-1].half() * (1 - time_mix_k)
+            xr = x * time_mix_r + state[i][-1].half() * (1 - time_mix_r)           
         else:
-            xk = x * time_mix_k + state[5*i+0] * (1 - time_mix_k)
-            xr = x * time_mix_r + state[5*i+0] * (1 - time_mix_r)
-            state[5*i+0] = x
+            xk = x * time_mix_k + state[i][-1] * (1 - time_mix_k)
+            xr = x * time_mix_r + state[i][-1] * (1 - time_mix_r)
+        
+        # print(state[i][-1])
+
+        state[i][-1] = x.float().squeeze()
+
+        state[i] = state[i].roll(1, 0)
 
         r = torch.sigmoid(rw @ xr)
         k = torch.square(torch.relu(kw @ xk))
@@ -192,7 +195,7 @@ class RWKV_RNN(MyModule):
         
         return ow @ (r * wkv)
 
-    def forward(self, ctx, state, preprocess_only = False):
+    def forward(self, ctx, state:tuple[List[torch.Tensor],torch.Tensor], preprocess_only = False):
         with torch.no_grad():
             w = self.w
             args = self.args
@@ -207,21 +210,26 @@ class RWKV_RNN(MyModule):
                 pass             
 
             if state == None:
-                state = torch.zeros(args.n_layer * 5, args.n_embd, device=self.RUN_DEVICE)
+                state = [torch.zeros(args.n_layer * 5, args.n_embd, device=self.RUN_DEVICE),
+                         [torch.zeros(i+1, args.n_embd, device=self.RUN_DEVICE) for i in range(args.n_layer)]]
                 for i in range(args.n_layer):
-                    state[5*i+4] -= 1e30
+                    state[0][5*i+4] -= 1e30
 
+            xstack = torch.zeros_like(x)
+                    
             for i in range(args.n_layer):
+                xstack = x + 2*xstack 
+                x = xstack + x
                 if i == 0:
                     x = self.LN(x, w.blocks[i].ln0)
                 
                 ww = w.blocks[i].att
-                x = x + self.SA(self.LN(x, w.blocks[i].ln1), state, i, 
+                x = x + self.SA(self.LN(x, w.blocks[i].ln1), state[0], i, 
                     ww.time_mix_k, ww.time_mix_v, ww.time_mix_r, ww.time_first, ww.time_decay, 
                     ww.key.weight, ww.value.weight, ww.receptance.weight, ww.output.weight)
                 
                 ww = w.blocks[i].ffn
-                x = x + self.FF(self.LN(x, w.blocks[i].ln2), state, i, 
+                x = x + self.FF(self.LN(x, w.blocks[i].ln2), state[1], i, 
                     ww.time_mix_k, ww.time_mix_r, 
                     ww.key.weight, ww.value.weight, ww.receptance.weight)
                 
